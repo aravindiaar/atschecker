@@ -11,12 +11,12 @@ import { Separator } from "@/components/ui/separator";
 import {
   CheckCircle, XCircle, AlertCircle, Sparkles, Loader2,
   Upload, FileText, Wand2, ArrowRight, Check, RotateCcw,
-  TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Eye, EyeOff,
+  TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp,
 } from "lucide-react";
 
 export default function AtsChecker() {
   const { resume } = useResume();
-  const { resumeText, filename, hydrated, saveResume, clearResume } = useResumeStore();
+  const { resumeText, filename, hydrated, saveResume } = useResumeStore();
   const atsCheck = useAtsCheck();
   const fixResume = useFixResume();
 
@@ -33,8 +33,6 @@ export default function AtsChecker() {
   const [appliedSections, setAppliedSections] = useState<Set<string>>(new Set());
 
   const [showFixDetails, setShowFixDetails] = useState(true);
-  const [showResumePreview, setShowResumePreview] = useState(true);
-  const [showFixedPreview, setShowFixedPreview] = useState(true);
 
   const activeResume = resumeText;
   const hasResume = hydrated && !!activeResume;
@@ -148,12 +146,17 @@ ${resume.education}`.trim();
     runAnalysis(fixResult.improvedResumeText);
   };
 
+  const previewText = fixResult ? fixResult.improvedResumeText : (resumeText ?? null);
+  const previewIsImproved = !!fixResult;
+
   return (
-    <div className="container max-w-4xl py-8 space-y-5">
+    <div className="container max-w-screen-2xl py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight mb-1">ATS Checker & Resume Fixer</h1>
         <p className="text-muted-foreground">Upload your resume once, then analyse, fix with AI, and re-analyse to see your score improve.</p>
       </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-6 items-start">
+      <div className="space-y-5">
 
       {/* ── STEP 1: Resume ── */}
       <StepCard
@@ -229,14 +232,6 @@ ${resume.education}`.trim();
           </div>
         )}
 
-        {hasResume && !showUploader && (
-          <TextPreview
-            text={activeResume!}
-            label="Extracted resume text"
-            show={showResumePreview}
-            onToggle={() => setShowResumePreview(v => !v)}
-          />
-        )}
       </StepCard>
 
       {/* ── STEP 2: Analyse ── */}
@@ -333,14 +328,6 @@ ${resume.education}`.trim();
                   ))}
                 </>
               )}
-              <Separator />
-              <TextPreview
-                text={fixResult.improvedResumeText}
-                label="Full improved resume text"
-                show={showFixedPreview}
-                onToggle={() => setShowFixedPreview(v => !v)}
-                accent
-              />
             </div>
           )
         )}
@@ -389,6 +376,17 @@ ${resume.education}`.trim();
           )}
         </div>
       </StepCard>
+      </div>{/* end left column */}
+
+      {/* ── RIGHT: Resume Preview Panel ── */}
+      <div className="xl:sticky xl:top-6">
+        <ResumePreviewPanel
+          text={previewText}
+          isImproved={previewIsImproved}
+          filename={filename}
+        />
+      </div>
+      </div>{/* end grid */}
     </div>
   );
 }
@@ -541,34 +539,140 @@ function FixSection({ label, after, sectionKey, applied, onApply, showBefore = t
   );
 }
 
-function TextPreview({ text, label, show, onToggle, accent = false }: {
-  text: string;
-  label: string;
-  show: boolean;
-  onToggle: () => void;
-  accent?: boolean;
+type ResumeLine =
+  | { type: "name"; content: string }
+  | { type: "contact"; content: string }
+  | { type: "section"; content: string }
+  | { type: "role"; content: string }
+  | { type: "bullet"; content: string }
+  | { type: "spacer" }
+  | { type: "body"; content: string };
+
+function parseResumeText(text: string): ResumeLine[] {
+  const rawLines = text.split("\n");
+  const lines: ResumeLine[] = [];
+  let nameFound = false;
+  let contactLineCount = 0;
+  let inHeader = true;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const raw = rawLines[i];
+    const trimmed = raw.trim();
+
+    if (!trimmed) {
+      if (inHeader) inHeader = false;
+      lines.push({ type: "spacer" });
+      continue;
+    }
+
+    if (!nameFound) {
+      nameFound = true;
+      lines.push({ type: "name", content: trimmed });
+      continue;
+    }
+
+    if (inHeader && contactLineCount < 4) {
+      contactLineCount++;
+      lines.push({ type: "contact", content: trimmed });
+      continue;
+    }
+
+    inHeader = false;
+
+    const isSectionHeader =
+      trimmed === trimmed.toUpperCase() &&
+      trimmed.length < 50 &&
+      /^[A-Z]/.test(trimmed) &&
+      !/^[•\-*]/.test(trimmed);
+
+    const isBullet = /^[•\-*]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed);
+
+    const isRole =
+      !isSectionHeader &&
+      !isBullet &&
+      trimmed.length < 80 &&
+      /[|,@]/.test(trimmed) &&
+      lines.length > 0 &&
+      lines[lines.length - 1].type === "section";
+
+    if (isSectionHeader) {
+      lines.push({ type: "section", content: trimmed });
+    } else if (isBullet) {
+      lines.push({ type: "bullet", content: trimmed.replace(/^[•\-*]\s*/, "") });
+    } else if (isRole) {
+      lines.push({ type: "role", content: trimmed });
+    } else {
+      lines.push({ type: "body", content: trimmed });
+    }
+  }
+
+  return lines;
+}
+
+function ResumePreviewPanel({
+  text,
+  isImproved,
+  filename,
+}: {
+  text: string | null;
+  isImproved: boolean;
+  filename: string | null;
 }) {
+  const lines = text ? parseResumeText(text) : [];
+
   return (
-    <div className={`rounded-lg border ${accent ? "border-primary/25 bg-primary/5" : "border-border bg-muted/20"}`}>
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-muted/30 transition-colors rounded-lg"
-      >
-        <span className={`flex items-center gap-2 text-sm font-medium ${accent ? "text-primary" : "text-foreground"}`}>
-          {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          {label}
-          <span className="text-xs font-normal text-muted-foreground">({text.split("\n").length} lines)</span>
-        </span>
-        {show ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-      </button>
-      {show && (
-        <div className="px-3 pb-3">
-          <pre className={`text-xs leading-relaxed whitespace-pre-wrap font-mono max-h-72 overflow-y-auto rounded-md p-3 border ${accent ? "bg-white dark:bg-background border-primary/15 text-foreground" : "bg-background border-border text-muted-foreground"}`}>
-            {text}
-          </pre>
+    <Card className="flex flex-col">
+      <CardHeader className="pb-3 flex-shrink-0">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Resume Preview
+          </CardTitle>
+          {text && (
+            <Badge
+              variant="outline"
+              className={`text-[11px] ${isImproved ? "border-primary/40 text-primary bg-primary/5" : "border-border"}`}
+            >
+              {isImproved ? <><Sparkles className="h-2.5 w-2.5 mr-1" />AI Improved</> : filename ?? "Uploaded"}
+            </Badge>
+          )}
         </div>
-      )}
-    </div>
+      </CardHeader>
+      <CardContent className="pt-0 overflow-y-auto max-h-[calc(100vh-10rem)]">
+        {!text ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm text-muted-foreground">Upload a resume to see the preview</p>
+          </div>
+        ) : (
+          <div className="space-y-0.5 text-[13px] leading-relaxed">
+            {lines.map((line, i) => {
+              if (line.type === "spacer") return <div key={i} className="h-2" />;
+              if (line.type === "name") return (
+                <h1 key={i} className="text-xl font-bold text-foreground tracking-tight mb-0.5">{line.content}</h1>
+              );
+              if (line.type === "contact") return (
+                <p key={i} className="text-xs text-muted-foreground">{line.content}</p>
+              );
+              if (line.type === "section") return (
+                <div key={i} className="mt-4 mb-1.5">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-primary border-b border-primary/20 pb-0.5">{line.content}</p>
+                </div>
+              );
+              if (line.type === "role") return (
+                <p key={i} className="text-xs font-semibold text-foreground/70 mb-0.5">{line.content}</p>
+              );
+              if (line.type === "bullet") return (
+                <div key={i} className="flex gap-2 items-start">
+                  <span className="text-primary/60 mt-px flex-shrink-0 text-[10px]">▸</span>
+                  <p className="text-foreground/80">{line.content}</p>
+                </div>
+              );
+              return <p key={i} className="text-foreground/80">{line.content}</p>;
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
