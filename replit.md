@@ -16,6 +16,19 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
+## Artifacts
+
+### Resume Builder & ATS Checker (`artifacts/resume-builder`)
+- React + Vite frontend at `/`
+- Two-panel resume builder (editor + live preview)
+- ATS Checker page at `/ats-checker` — paste a job description and get a detailed compatibility score
+- Pre-filled with Aravind's resume data
+
+### API Server (`artifacts/api-server`)
+- Express 5 backend at `/api`
+- `POST /api/resume/ats-check` — keyword, format, and experience analysis
+- `GET /api/resume/templates` — list of resume templates
+
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages

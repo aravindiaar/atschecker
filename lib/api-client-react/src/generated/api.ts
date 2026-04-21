@@ -5,18 +5,26 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  AtsCheckRequest,
+  AtsCheckResult,
+  HealthStatus,
+  ResumeTemplateList,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -92,6 +100,168 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Analyzes a resume against a job description for ATS compatibility
+ * @summary Run ATS analysis
+ */
+export const getAtsCheckUrl = () => {
+  return `/api/resume/ats-check`;
+};
+
+export const atsCheck = async (
+  atsCheckRequest: AtsCheckRequest,
+  options?: RequestInit,
+): Promise<AtsCheckResult> => {
+  return customFetch<AtsCheckResult>(getAtsCheckUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(atsCheckRequest),
+  });
+};
+
+export const getAtsCheckMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atsCheck>>,
+    TError,
+    { data: BodyType<AtsCheckRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atsCheck>>,
+  TError,
+  { data: BodyType<AtsCheckRequest> },
+  TContext
+> => {
+  const mutationKey = ["atsCheck"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atsCheck>>,
+    { data: BodyType<AtsCheckRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atsCheck(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtsCheckMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atsCheck>>
+>;
+export type AtsCheckMutationBody = BodyType<AtsCheckRequest>;
+export type AtsCheckMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Run ATS analysis
+ */
+export const useAtsCheck = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atsCheck>>,
+    TError,
+    { data: BodyType<AtsCheckRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atsCheck>>,
+  TError,
+  { data: BodyType<AtsCheckRequest> },
+  TContext
+> => {
+  return useMutation(getAtsCheckMutationOptions(options));
+};
+
+/**
+ * @summary Get available resume templates
+ */
+export const getGetResumeTemplatesUrl = () => {
+  return `/api/resume/templates`;
+};
+
+export const getResumeTemplates = async (
+  options?: RequestInit,
+): Promise<ResumeTemplateList> => {
+  return customFetch<ResumeTemplateList>(getGetResumeTemplatesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetResumeTemplatesQueryKey = () => {
+  return [`/api/resume/templates`] as const;
+};
+
+export const getGetResumeTemplatesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getResumeTemplates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getResumeTemplates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetResumeTemplatesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getResumeTemplates>>
+  > = ({ signal }) => getResumeTemplates({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getResumeTemplates>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetResumeTemplatesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getResumeTemplates>>
+>;
+export type GetResumeTemplatesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get available resume templates
+ */
+
+export function useGetResumeTemplates<
+  TData = Awaited<ReturnType<typeof getResumeTemplates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getResumeTemplates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetResumeTemplatesQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

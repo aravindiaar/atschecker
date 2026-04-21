@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: resume
+    description: Resume and ATS operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /resume/ats-check:
+    post:
+      operationId: atsCheck
+      tags: [resume]
+      summary: Run ATS analysis
+      description: Analyzes a resume against a job description for ATS compatibility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AtsCheckRequest"
+      responses:
+        "200":
+          description: ATS analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AtsCheckResult"
+
+  /resume/templates:
+    get:
+      operationId: getResumeTemplates
+      tags: [resume]
+      summary: Get available resume templates
+      responses:
+        "200":
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumeTemplateList"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +70,84 @@ components:
       required:
         - status
 
+    AtsCheckRequest:
+      type: object
+      properties:
+        resumeText:
+          type: string
+          description: The full resume text content
+        jobDescription:
+          type: string
+          description: The job description to match against
+      required:
+        - resumeText
+        - jobDescription
+
+    AtsCheckResult:
+      type: object
+      properties:
+        overallScore:
+          type: number
+          description: Overall ATS compatibility score (0-100)
+        keywordScore:
+          type: number
+          description: Keyword match score (0-100)
+        formatScore:
+          type: number
+          description: Format/structure score (0-100)
+        experienceScore:
+          type: number
+          description: Experience relevance score (0-100)
+        matchedKeywords:
+          type: array
+          items:
+            type: string
+          description: Keywords found in both resume and job description
+        missingKeywords:
+          type: array
+          items:
+            type: string
+          description: Important keywords from job description missing in resume
+        suggestions:
+          type: array
+          items:
+            type: string
+          description: Actionable improvement suggestions
+        strengths:
+          type: array
+          items:
+            type: string
+          description: Strong points of the resume for this job
+      required:
+        - overallScore
+        - keywordScore
+        - formatScore
+        - experienceScore
+        - matchedKeywords
+        - missingKeywords
+        - suggestions
+        - strengths
+
+    ResumeTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+      required:
+        - id
+        - name
+        - description
+
+    ResumeTemplateList:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResumeTemplate"
+      required:
+        - templates

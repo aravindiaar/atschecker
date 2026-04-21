@@ -6,4 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./atsCheckRequest";
+export * from "./atsCheckResult";
 export * from "./healthStatus";
+export * from "./resumeTemplate";
+export * from "./resumeTemplateList";

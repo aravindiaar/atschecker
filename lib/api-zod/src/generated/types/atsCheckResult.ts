@@ -5,16 +5,6 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface HealthStatus {
-  status: string;
-}
-
-export interface AtsCheckRequest {
-  /** The full resume text content */
-  resumeText: string;
-  /** The job description to match against */
-  jobDescription: string;
-}
 
 export interface AtsCheckResult {
   /** Overall ATS compatibility score (0-100) */
@@ -33,14 +23,4 @@ export interface AtsCheckResult {
   suggestions: string[];
   /** Strong points of the resume for this job */
   strengths: string[];
-}
-
-export interface ResumeTemplate {
-  id: string;
-  name: string;
-  description: string;
-}
-
-export interface ResumeTemplateList {
-  templates: ResumeTemplate[];
 }

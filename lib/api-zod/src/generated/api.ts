@@ -14,3 +14,46 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Analyzes a resume against a job description for ATS compatibility
+ * @summary Run ATS analysis
+ */
+export const AtsCheckBody = zod.object({
+  resumeText: zod.string().describe("The full resume text content"),
+  jobDescription: zod.string().describe("The job description to match against"),
+});
+
+export const AtsCheckResponse = zod.object({
+  overallScore: zod
+    .number()
+    .describe("Overall ATS compatibility score (0-100)"),
+  keywordScore: zod.number().describe("Keyword match score (0-100)"),
+  formatScore: zod.number().describe("Format\/structure score (0-100)"),
+  experienceScore: zod.number().describe("Experience relevance score (0-100)"),
+  matchedKeywords: zod
+    .array(zod.string())
+    .describe("Keywords found in both resume and job description"),
+  missingKeywords: zod
+    .array(zod.string())
+    .describe("Important keywords from job description missing in resume"),
+  suggestions: zod
+    .array(zod.string())
+    .describe("Actionable improvement suggestions"),
+  strengths: zod
+    .array(zod.string())
+    .describe("Strong points of the resume for this job"),
+});
+
+/**
+ * @summary Get available resume templates
+ */
+export const GetResumeTemplatesResponse = zod.object({
+  templates: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      description: zod.string(),
+    }),
+  ),
+});

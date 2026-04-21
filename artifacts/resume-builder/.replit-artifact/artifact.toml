@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Resume Builder & ATS Checker"
+version = "1.0.0"
+id = "artifacts/resume-builder"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20047
+
+[services.development]
+run = "pnpm --filter @workspace/resume-builder run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/resume-builder", "run", "build" ]
+publicDir = "artifacts/resume-builder/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20047"
+BASE_PATH = "/"
