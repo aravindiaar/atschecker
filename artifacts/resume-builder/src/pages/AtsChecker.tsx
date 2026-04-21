@@ -302,6 +302,14 @@ ${resume.education}`.trim();
             <p className="text-sm text-muted-foreground">
               AI will rewrite your summary, skills, and experience bullets to improve ATS compatibility — only based on what's already in your resume.
             </p>
+            {analysis && analysis.keywordScore < 30 && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50/60 dark:border-amber-800/40 dark:bg-amber-900/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <span>
+                  <strong>Low keyword match ({analysis.keywordScore}%).</strong> Your resume is significantly mismatched with this job description. The AI fix will polish your wording and structure, but it won't fabricate skills or experience you don't have — so the score improvement will be limited. For best results, target roles that match your background.
+                </span>
+              </div>
+            )}
             <Button onClick={onFix} disabled={!hasAnalysis || fixResume.isPending} className="w-full sm:w-auto">
               {fixResume.isPending ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rewriting resume...</>
@@ -378,6 +386,14 @@ ${resume.education}`.trim();
                   <ScoreDelta before={analysis.overallScore} after={reAnalysis.overallScore} className="justify-center mt-1" />
                 </div>
               </div>
+              {(reAnalysis.overallScore - analysis.overallScore) < 10 && reAnalysis.keywordScore < 35 && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/60 dark:border-blue-800/40 dark:bg-blue-900/10 p-3 text-sm text-blue-800 dark:text-blue-300">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Why is the improvement small?</strong> When a resume is significantly mismatched with a job description, keyword matching (which drives 50% of the score) stays very low no matter how the text is polished. The AI improved your formatting and phrasing, but it can't add technical skills or experience that aren't in your original resume. Consider applying for roles that better match your actual background for a higher score.
+                  </span>
+                </div>
+              )}
               <AtsResults result={reAnalysis} isTargeted={jobDescription.trim().length > 10} />
             </div>
           )}
