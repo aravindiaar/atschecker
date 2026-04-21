@@ -5,6 +5,7 @@ import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import mammoth from "mammoth";
 import { AtsCheckBody, AtsCheckResponse, FixResumeBody, FixResumeResponse, GetResumeTemplatesResponse } from "@workspace/api-zod";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import { incrementStat } from "./stats";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -282,6 +283,7 @@ router.post("/resume/ats-check", async (req, res): Promise<void> => {
   });
 
   req.log.info({ overallScore: result.overallScore, mode: hasJD ? "jd-match" : "general" }, "ATS check complete");
+  void incrementStat("totalAnalyses");
   res.json(result);
 });
 
@@ -362,6 +364,7 @@ Rules:
 
     const result = FixResumeResponse.parse(parsed_result);
     req.log.info({ experienceCount: result.experienceImprovements.length }, "AI resume fix complete");
+    void incrementStat("totalFixes");
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "AI resume fix failed");
@@ -428,6 +431,7 @@ router.post("/resume/parse", upload.single("file"), async (req, res): Promise<vo
     }
 
     req.log.info({ bytes: text.length, filename: file.originalname }, "Resume parsed");
+    void incrementStat("totalUploads");
     res.json({ text, filename: file.originalname });
   } catch (err) {
     req.log.error({ err }, "Failed to parse resume file");
