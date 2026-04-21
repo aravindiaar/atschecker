@@ -576,11 +576,28 @@ function isSectionHeader(line: string): boolean {
   );
 }
 
+// Matches any common bullet prefix character (with optional trailing whitespace).
+// Covers: •  -  *  and the full Unicode geometric-shapes block U+25A0–U+25FF
+// which includes □ (U+25A1), ■, ▪, ▸, ►, ○, ● etc. that PDF parsers often emit.
+// Space after the bullet is OPTIONAL because some PDFs emit "□Text" with no gap.
+const BULLET_CHAR_RE = /^[\u2022\u25A0-\u25FF\u2013\u2014\u2012\u2219\u25E6\u2023\u2043\u204C\u204D*\-]/u;
+const BULLET_RE      = /^[\u2022\u25A0-\u25FF\u2013\u2014\u2012\u2219\u25E6\u2023\u2043\u204C\u204D*\-]\s*/u;
+
+function stripBullet(t: string): string {
+  return t.replace(BULLET_RE, "").replace(/^\d+[.)]\s*/, "").trim();
+}
+
+function isBulletLine(t: string): boolean {
+  // Must start with a bullet char AND the remainder should be non-empty text
+  return (BULLET_CHAR_RE.test(t) && t.length > 1) || /^\d+[.)]\s/.test(t);
+}
+
 function parseResumeText(text: string): ResumeLine[] {
   const rawLines = text.split("\n");
   const result: ResumeLine[] = [];
   let phase: "header" | "body" = "header";
   let nameSet = false;
+  let headerLinesSinceTitle = 0;
   let lastNonSpacerType: ResumeLine["type"] | null = null;
 
   for (const raw of rawLines) {
@@ -599,31 +616,52 @@ function parseResumeText(text: string): ResumeLine[] {
         lastNonSpacerType = "name";
         continue;
       }
+
       if (isSectionHeader(t)) {
         phase = "body";
         result.push({ type: "section", content: t });
         lastNonSpacerType = "section";
         continue;
       }
+
+      // If a line in the header is long (looks like a paragraph), it's actually
+      // body/summary text — switch phase and re-process as body
+      const isParagraph = t.length > 90 && !looksLikeContact(t);
+      if (isParagraph) {
+        phase = "body";
+        result.push({ type: "body", content: t });
+        lastNonSpacerType = "body";
+        continue;
+      }
+
       if (looksLikeContact(t)) {
         result.push({ type: "contact", content: t });
         lastNonSpacerType = "contact";
       } else {
-        result.push({ type: "title", content: t });
-        lastNonSpacerType = "title";
+        headerLinesSinceTitle++;
+        // Only the very first non-contact short line is treated as the job title.
+        // Everything beyond that (summary paragraphs, work-rights notes, etc.) is body.
+        if (headerLinesSinceTitle === 1) {
+          result.push({ type: "title", content: t });
+          lastNonSpacerType = "title";
+        } else {
+          phase = "body";
+          result.push({ type: "body", content: t });
+          lastNonSpacerType = "body";
+        }
       }
       continue;
     }
 
+    // ── Body phase ─────────────────────────────────────────────
     if (isSectionHeader(t)) {
       result.push({ type: "section", content: t });
       lastNonSpacerType = "section";
       continue;
     }
 
-    const isBullet = /^[•\-*]\s/.test(t) || /^\d+\.\s/.test(t);
-    if (isBullet) {
-      result.push({ type: "bullet", content: t.replace(/^[•\-*]\d*\.\s*/, "").replace(/^[\-*]\s*/, "") });
+    if (isBulletLine(t)) {
+      result.push({ type: "bullet", content: stripBullet(t) });
       lastNonSpacerType = "bullet";
       continue;
     }
@@ -634,11 +672,11 @@ function parseResumeText(text: string): ResumeLine[] {
       continue;
     }
 
-    if (lastNonSpacerType === "role") {
+    if (lastNonSpacerType === "role" || lastNonSpacerType === "role-meta") {
       const looksLikeMeta =
-        t.length < 80 &&
+        t.length < 90 &&
         (/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Present|\d{4})\b/.test(t) ||
-          /\b(Remote|Hybrid|On-?site|New Zealand|Auckland|Wellington|Hamilton|USA|UK)\b/i.test(t));
+          /\b(Remote|Hybrid|On-?site|New Zealand|Auckland|Wellington|Hamilton|Sydney|USA|UK)\b/i.test(t));
       if (looksLikeMeta) {
         result.push({ type: "role-meta", content: t });
         lastNonSpacerType = "role-meta";
