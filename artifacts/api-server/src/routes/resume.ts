@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 // Import the internal lib to avoid the test-file bug in pdf-parse@1.1.1 root index
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
+import mammoth from "mammoth";
 import { AtsCheckBody, AtsCheckResponse, FixResumeBody, FixResumeResponse, GetResumeTemplatesResponse } from "@workspace/api-zod";
 import { openai } from "@workspace/integrations-openai-ai-server";
 
@@ -372,9 +373,18 @@ router.post("/resume/parse", upload.single("file"), async (req, res): Promise<vo
 
   try {
     let text = "";
-    if (file.mimetype === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf")) {
+    const name = file.originalname.toLowerCase();
+    const isPdf = file.mimetype === "application/pdf" || name.endsWith(".pdf");
+    const isDocx =
+      file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      name.endsWith(".docx");
+
+    if (isPdf) {
       const pdfData = await pdfParse(file.buffer);
       text = pdfData.text;
+    } else if (isDocx) {
+      const result = await mammoth.extractRawText({ buffer: file.buffer });
+      text = result.value;
     } else {
       text = file.buffer.toString("utf-8");
     }
@@ -389,7 +399,7 @@ router.post("/resume/parse", upload.single("file"), async (req, res): Promise<vo
     res.json({ text, filename: file.originalname });
   } catch (err) {
     req.log.error({ err }, "Failed to parse resume file");
-    res.status(500).json({ error: "Failed to parse the file. Please try a text (.txt) file instead." });
+    res.status(500).json({ error: "Failed to parse the file. Please try a text (.txt) or PDF file instead." });
   }
 });
 

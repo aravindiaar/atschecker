@@ -199,14 +199,14 @@ ${resume.education}`.trim();
                   <Upload className="h-8 w-8 text-muted-foreground/60" />
                   <div>
                     <p className="font-medium">Drop your resume here, or click to browse</p>
-                    <p className="text-sm text-muted-foreground mt-0.5">Supports PDF and .txt files · Max 10MB</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">PDF, DOCX, or TXT · Max 10MB</p>
                   </div>
                 </div>
               )}
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.txt,text/plain,application/pdf"
+                accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                 className="hidden"
                 onChange={onFileChange}
               />
