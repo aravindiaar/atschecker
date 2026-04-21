@@ -9,6 +9,6 @@
 export interface AtsCheckRequest {
   /** The full resume text content */
   resumeText: string;
-  /** The job description to match against */
-  jobDescription: string;
+  /** Optional job description to match against. If omitted, a general ATS check is performed. */
+  jobDescription?: string;
 }

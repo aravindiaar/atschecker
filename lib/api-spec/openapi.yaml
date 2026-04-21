@@ -78,10 +78,9 @@ components:
           description: The full resume text content
         jobDescription:
           type: string
-          description: The job description to match against
+          description: Optional job description to match against. If omitted, a general ATS check is performed.
       required:
         - resumeText
-        - jobDescription
 
     AtsCheckResult:
       type: object

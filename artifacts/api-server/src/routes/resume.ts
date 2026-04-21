@@ -82,9 +82,24 @@ function scoreFormat(resumeText: string): number {
   return Math.min(score, 100);
 }
 
-function scoreExperience(resumeText: string, jobText: string): number {
+function scoreExperience(resumeText: string, jobText?: string): number {
   let score = 50;
   const resume = resumeText.toLowerCase();
+
+  if (!jobText) {
+    // General experience scoring when no JD provided
+    const yearsInResume = resume.match(/(\d+)\+?\s*years?/);
+    if (yearsInResume) {
+      const yrs = parseInt(yearsInResume[1], 10);
+      if (yrs >= 8) score += 40;
+      else if (yrs >= 5) score += 30;
+      else if (yrs >= 2) score += 15;
+    }
+    const seniorTerms = ["senior", "lead", "principal", "architect", "manager"];
+    if (seniorTerms.some((t) => resume.includes(t))) score += 10;
+    return Math.min(score, 100);
+  }
+
   const job = jobText.toLowerCase();
 
   const yearsMatch = job.match(/(\d+)\+?\s*years?/);
@@ -109,6 +124,28 @@ function scoreExperience(resumeText: string, jobText: string): number {
   return Math.min(score, 100);
 }
 
+const TECH_KEYWORDS = [
+  "c#", ".net", ".net core", "asp.net", "rest", "api", "microservices", "docker",
+  "azure", "postgresql", "sql", "redis", "jwt", "oauth", "ci/cd", "devops",
+  "node.js", "python", "javascript", "typescript", "git", "jenkins", "powershell",
+  "kubernetes", "cloud", "grpc", "graphql", "rabbitmq", "elasticsearch",
+  "agile", "scrum", "etl", "mvc", "entity framework", "linq", "signalr",
+];
+
+function generalKeywordScore(resumeText: string): { score: number; present: string[]; missing: string[] } {
+  const lower = resumeText.toLowerCase();
+  const present: string[] = [];
+  const missing: string[] = [];
+
+  for (const kw of TECH_KEYWORDS) {
+    if (lower.includes(kw)) present.push(kw);
+    else missing.push(kw);
+  }
+
+  const score = Math.round((present.length / TECH_KEYWORDS.length) * 100);
+  return { score: Math.min(score, 100), present, missing };
+}
+
 const RESUME_TEMPLATES = [
   { id: "professional", name: "Professional", description: "Clean, classic layout ideal for corporate roles" },
   { id: "technical", name: "Technical", description: "Skills-forward layout for engineering and tech roles" },
@@ -124,77 +161,104 @@ router.post("/resume/ats-check", async (req, res): Promise<void> => {
   }
 
   const { resumeText, jobDescription } = parsed.data;
+  const hasJD = !!jobDescription && jobDescription.trim().length > 10;
 
-  const resumeKeywords = extractKeyPhrases(resumeText);
-  const jobKeywords = extractKeyPhrases(jobDescription);
+  const formatScore = scoreFormat(resumeText);
+  const experienceScore = scoreExperience(resumeText, hasJD ? jobDescription : undefined);
 
-  const matched: string[] = [];
-  const missing: string[] = [];
+  const suggestions: string[] = [];
+  const strengths: string[] = [];
 
-  for (const keyword of jobKeywords) {
-    if (keyword.length < 3) continue;
-    const found = resumeText.toLowerCase().includes(keyword.toLowerCase());
-    if (found) {
-      matched.push(keyword);
-    } else {
-      missing.push(keyword);
+  let keywordScore: number;
+  let uniqueMatched: string[];
+  let uniqueMissing: string[];
+
+  if (hasJD) {
+    // Targeted JD-match mode
+    const jobKeywords = extractKeyPhrases(jobDescription!);
+    const matched: string[] = [];
+    const missing: string[] = [];
+
+    for (const keyword of jobKeywords) {
+      if (keyword.length < 3) continue;
+      if (resumeText.toLowerCase().includes(keyword.toLowerCase())) {
+        matched.push(keyword);
+      } else {
+        missing.push(keyword);
+      }
+    }
+
+    uniqueMatched = [...new Set(matched)].slice(0, 30);
+    uniqueMissing = [...new Set(missing)]
+      .filter((k) => !STOP_WORDS.has(k) && k.length > 2)
+      .slice(0, 20);
+
+    keywordScore = jobKeywords.size > 0
+      ? Math.round((uniqueMatched.length / Math.min(jobKeywords.size, uniqueMatched.length + uniqueMissing.length)) * 100)
+      : 70;
+
+    if (uniqueMissing.length > 0) {
+      suggestions.push(`Add these missing keywords to your resume: ${uniqueMissing.slice(0, 5).join(", ")}`);
+    }
+    if (keywordScore < 60) {
+      suggestions.push("Tailor your summary and skills section to include more keywords from the job description.");
+    }
+    if (uniqueMissing.length > 5) {
+      suggestions.push("Consider adding a dedicated 'Technical Skills' section listing relevant technologies from the JD.");
+    }
+    if (uniqueMatched.length > 10) strengths.push("Strong keyword alignment with the job description.");
+    if (uniqueMatched.length > 5) strengths.push(`Good match on key terms: ${uniqueMatched.slice(0, 3).join(", ")}.`);
+    if (/azure|aws|cloud/i.test(resumeText) && /azure|aws|cloud/i.test(jobDescription!)) {
+      strengths.push("Cloud platform experience aligns with the job requirements.");
+    }
+    if (uniqueMatched.some((k) => ["c#", ".net", "rest", "api", "microservices"].includes(k))) {
+      strengths.push("Core backend technology stack matches the role.");
+    }
+  } else {
+    // General ATS check mode — evaluate resume on its own merit
+    const gen = generalKeywordScore(resumeText);
+    keywordScore = gen.score;
+    uniqueMatched = gen.present.slice(0, 30);
+    uniqueMissing = gen.missing.slice(0, 20);
+
+    if (uniqueMissing.length > 0) {
+      suggestions.push(`Consider adding these commonly sought tech skills if applicable: ${uniqueMissing.slice(0, 5).join(", ")}`);
+    }
+    if (keywordScore < 50) {
+      suggestions.push("Your skills section could be broader. List all technologies, frameworks, and tools you have used.");
+    }
+
+    if (uniqueMatched.length > 10) strengths.push("Wide range of technical skills and technologies listed.");
+    if (uniqueMatched.some((k) => ["c#", ".net", "docker", "azure"].includes(k))) {
+      strengths.push("Core backend and cloud technologies are well represented.");
     }
   }
 
-  const uniqueMatched = [...new Set(matched)].slice(0, 30);
-  const uniqueMissing = [...new Set(missing)]
-    .filter((k) => !STOP_WORDS.has(k) && k.length > 2)
-    .slice(0, 20);
-
-  const keywordScore = jobKeywords.size > 0
-    ? Math.round((uniqueMatched.length / Math.min(jobKeywords.size, uniqueMatched.length + uniqueMissing.length)) * 100)
-    : 70;
-
-  const formatScore = scoreFormat(resumeText);
-  const experienceScore = scoreExperience(resumeText, jobDescription);
-  const overallScore = Math.round(keywordScore * 0.5 + formatScore * 0.25 + experienceScore * 0.25);
-
-  const suggestions: string[] = [];
-
-  if (uniqueMissing.length > 0) {
-    suggestions.push(
-      `Add these missing keywords to your resume: ${uniqueMissing.slice(0, 5).join(", ")}`
-    );
-  }
-  if (keywordScore < 60) {
-    suggestions.push("Tailor your summary and skills section to include more keywords from the job description.");
-  }
+  // Shared suggestions
   if (!(/(quantif|measur|\d+%|\d+x|\$\d)/i.test(resumeText))) {
     suggestions.push("Quantify your achievements with numbers (e.g., 'reduced latency by 40%', 'managed team of 5').");
   }
-  if (!/action|led|built|designed|implemented|developed|delivered|improved|optimized/i.test(resumeText)) {
+  if (!/led|built|designed|implemented|developed|delivered|improved|optimized/i.test(resumeText)) {
     suggestions.push("Start bullet points with strong action verbs (e.g., Led, Built, Designed, Implemented).");
   }
   if (resumeText.length < 500) {
     suggestions.push("Your resume appears brief. Consider adding more detail to your experience sections.");
-  }
-  if (uniqueMissing.length > 5) {
-    suggestions.push("Consider adding a dedicated 'Technical Skills' or 'Key Competencies' section listing relevant technologies.");
   }
   if (suggestions.length < 3) {
     suggestions.push("Use industry-standard section headings (Experience, Education, Skills) for better ATS parsing.");
     suggestions.push("Avoid tables, columns, or graphics — they can confuse ATS parsers. Use plain text formatting.");
   }
 
-  const strengths: string[] = [];
-  if (uniqueMatched.length > 10) strengths.push("Strong keyword alignment with the job description.");
-  if (uniqueMatched.length > 5) strengths.push(`Good match on key terms: ${uniqueMatched.slice(0, 3).join(", ")}.`);
+  // Shared strengths
   if (/\d+%/.test(resumeText)) strengths.push("Includes quantified achievements, which ATS systems value highly.");
   if (/senior|lead|principal/i.test(resumeText)) strengths.push("Demonstrates senior-level experience and leadership.");
-  if (/azure|aws|cloud/i.test(resumeText) && /azure|aws|cloud/i.test(jobDescription)) {
-    strengths.push("Cloud platform experience aligns with the job requirements.");
-  }
-  if (uniqueMatched.some((k) => ["c#", ".net", "rest", "api", "microservices"].includes(k))) {
-    strengths.push("Core backend technology stack matches the role.");
-  }
   if (strengths.length === 0) {
     strengths.push("Resume includes relevant professional experience.");
   }
+
+  const overallScore = hasJD
+    ? Math.round(keywordScore * 0.5 + formatScore * 0.25 + experienceScore * 0.25)
+    : Math.round(keywordScore * 0.4 + formatScore * 0.35 + experienceScore * 0.25);
 
   const result = AtsCheckResponse.parse({
     overallScore: Math.min(Math.max(overallScore, 0), 100),
@@ -207,7 +271,7 @@ router.post("/resume/ats-check", async (req, res): Promise<void> => {
     strengths,
   });
 
-  req.log.info({ overallScore: result.overallScore }, "ATS check complete");
+  req.log.info({ overallScore: result.overallScore, mode: hasJD ? "jd-match" : "general" }, "ATS check complete");
   res.json(result);
 });
 

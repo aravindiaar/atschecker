@@ -21,7 +21,12 @@ export const HealthCheckResponse = zod.object({
  */
 export const AtsCheckBody = zod.object({
   resumeText: zod.string().describe("The full resume text content"),
-  jobDescription: zod.string().describe("The job description to match against"),
+  jobDescription: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional job description to match against. If omitted, a general ATS check is performed.",
+    ),
 });
 
 export const AtsCheckResponse = zod.object({

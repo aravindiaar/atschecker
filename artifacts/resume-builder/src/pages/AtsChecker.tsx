@@ -13,13 +13,14 @@ import { CheckCircle, XCircle, AlertCircle, Sparkles, Loader2, FileCheck } from 
 import { Badge } from "@/components/ui/badge";
 
 const formSchema = z.object({
-  jobDescription: z.string().min(10, "Job description is required for analysis"),
+  jobDescription: z.string().optional(),
 });
 
 export default function AtsChecker() {
   const { resume } = useResume();
   const atsCheck = useAtsCheck();
   const [result, setResult] = useState<AtsCheckResult | null>(null);
+  const [isTargeted, setIsTargeted] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -53,11 +54,13 @@ ${resume.education}
   };
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
+    const hasJD = !!(data.jobDescription && data.jobDescription.trim().length > 10);
+    setIsTargeted(hasJD);
     atsCheck.mutate(
       {
         data: {
           resumeText: getResumeText(),
-          jobDescription: data.jobDescription,
+          ...(hasJD ? { jobDescription: data.jobDescription } : {}),
         }
       },
       {
@@ -79,7 +82,7 @@ ${resume.education}
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight mb-2">ATS Compatibility Checker</h1>
         <p className="text-muted-foreground">
-          See how well your resume matches a specific job description. Our AI analyzes keywords, experience, and format to give you a detailed score and actionable feedback.
+          Run a general ATS check on your resume, or paste a job description for a targeted keyword match. Both modes analyze your resume's format, structure, and experience signals.
         </p>
       </div>
 
@@ -88,7 +91,7 @@ ${resume.education}
           <Card>
             <CardHeader>
               <CardTitle>Job Description</CardTitle>
-              <CardDescription>Paste the job posting you want to apply for.</CardDescription>
+              <CardDescription>Optional — paste a job posting for a targeted match, or leave blank for a general ATS scan.</CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...form}>
@@ -100,7 +103,7 @@ ${resume.education}
                       <FormItem>
                         <FormControl>
                           <Textarea
-                            placeholder="Paste job description here..."
+                            placeholder="Paste job description here (optional)..."
                             className="min-h-[300px] resize-y"
                             {...field}
                           />
@@ -137,7 +140,7 @@ ${resume.education}
             <div className="h-full min-h-[400px] flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-12 text-center text-muted-foreground">
               <FileCheck className="h-12 w-12 mb-4 text-muted" />
               <h3 className="text-lg font-medium text-foreground mb-1">Ready for analysis</h3>
-              <p>Paste a job description and click analyze to see your score.</p>
+              <p>Click "Run ATS Analysis" to get your score. Optionally paste a job description for a targeted keyword match.</p>
             </div>
           )}
 
@@ -204,7 +207,7 @@ ${resume.education}
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center text-green-600">
                       <CheckCircle className="w-4 h-4 mr-2" />
-                      Matched Keywords
+                      {isTargeted ? "Matched Keywords" : "Skills Found"}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -226,7 +229,7 @@ ${resume.education}
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center text-red-600">
                       <XCircle className="w-4 h-4 mr-2" />
-                      Missing Keywords
+                      {isTargeted ? "Missing Keywords" : "Skills to Consider Adding"}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
