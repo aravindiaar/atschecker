@@ -709,16 +709,14 @@ async function generateDocx(lines: ResumeLine[], outputName: string): Promise<vo
     }
     if (line.type === "title") {
       children.push(new Paragraph({
-        alignment: AlignmentType.CENTER,
         spacing: { after: 40 },
-        children: [new TextRun({ text: line.content, size: 22, italics: true, font: "Calibri", color: "444444" })],
+        children: [new TextRun({ text: line.content, bold: true, size: 22, font: "Calibri", color: "333333" })],
       }));
       continue;
     }
     if (line.type === "contact") {
       children.push(new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 40 },
+        spacing: { after: 30 },
         children: [new TextRun({ text: line.content, size: 18, font: "Calibri", color: "555555" })],
       }));
       continue;
@@ -854,22 +852,22 @@ function ResumePreviewPanel({
         ) : (
           <div className="text-[12.5px] leading-relaxed">
             {lines.map((line, i) => {
-              if (line.type === "spacer") return <div key={i} className="h-2.5" />;
+              if (line.type === "spacer") return <div key={i} className="h-2" />;
 
               if (line.type === "name") return (
-                <h1 key={i} className="text-[22px] font-bold text-foreground tracking-tight leading-tight text-center mb-0.5">
+                <h1 key={i} className="text-[20px] font-bold text-foreground tracking-tight leading-tight mb-1">
                   {line.content}
                 </h1>
               );
 
               if (line.type === "title") return (
-                <p key={i} className="text-[13px] font-medium text-foreground/70 text-center italic mb-0.5">
+                <p key={i} className="text-[12px] font-semibold text-foreground/75 mb-0.5">
                   {line.content}
                 </p>
               );
 
               if (line.type === "contact") return (
-                <p key={i} className="text-[11px] text-muted-foreground text-center leading-snug">
+                <p key={i} className="text-[11px] text-muted-foreground leading-snug">
                   {line.content}
                 </p>
               );
@@ -889,7 +887,7 @@ function ResumePreviewPanel({
               );
 
               if (line.type === "role-meta") return (
-                <p key={i} className="text-[11px] text-muted-foreground italic mb-0.5">
+                <p key={i} className="text-[11px] text-muted-foreground mb-0.5">
                   {line.content}
                 </p>
               );
