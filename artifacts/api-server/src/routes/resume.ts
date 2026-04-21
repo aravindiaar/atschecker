@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { AtsCheckBody, AtsCheckResponse, GetResumeTemplatesResponse } from "@workspace/api-zod";
+import { AtsCheckBody, AtsCheckResponse, FixResumeBody, FixResumeResponse, GetResumeTemplatesResponse } from "@workspace/api-zod";
+import { openai } from "@workspace/integrations-openai-ai-server";
 
 const router = Router();
 
@@ -273,6 +274,86 @@ router.post("/resume/ats-check", async (req, res): Promise<void> => {
 
   req.log.info({ overallScore: result.overallScore, mode: hasJD ? "jd-match" : "general" }, "ATS check complete");
   res.json(result);
+});
+
+router.post("/resume/fix", async (req, res): Promise<void> => {
+  const parsed = FixResumeBody.safeParse(req.body);
+  if (!parsed.success) {
+    req.log.warn({ errors: parsed.error.message }, "Invalid fix resume request");
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { resumeText, jobDescription, missingKeywords, suggestions } = parsed.data;
+
+  const jdContext = jobDescription
+    ? `\nThe resume is being tailored for this job description:\n${jobDescription.substring(0, 1500)}`
+    : "";
+
+  const keywordsContext = missingKeywords && missingKeywords.length > 0
+    ? `\nKeywords to incorporate if truthfully applicable: ${missingKeywords.slice(0, 15).join(", ")}`
+    : "";
+
+  const suggestionsContext = suggestions && suggestions.length > 0
+    ? `\nATS suggestions to address:\n${suggestions.map(s => `- ${s}`).join("\n")}`
+    : "";
+
+  const prompt = `You are an expert resume writer and ATS specialist. Improve the following resume based on the ATS analysis findings.
+
+CURRENT RESUME:
+${resumeText}
+${jdContext}
+${keywordsContext}
+${suggestionsContext}
+
+Return ONLY a JSON object with this exact structure (no markdown, no backticks):
+{
+  "improvedSummary": "rewritten professional summary (2-4 sentences, strong action-oriented, includes relevant keywords naturally)",
+  "improvedSkills": "improved comma-separated skills list incorporating missing relevant keywords",
+  "experienceImprovements": [
+    {
+      "index": 0,
+      "improvedBullets": ["improved bullet 1", "improved bullet 2", "..."]
+    }
+  ],
+  "overallChanges": "brief 2-3 sentence explanation of what was improved and why"
+}
+
+Rules:
+- Only improve what's there — do not fabricate experience or skills
+- Make bullet points start with strong action verbs and include measurable results where possible
+- Keep the tone professional and concise
+- Naturally incorporate relevant missing keywords without keyword stuffing
+- Include improvements for ALL experience entries found in the resume`;
+
+  req.log.info("Starting AI resume fix");
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 4096,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "";
+
+    let parsed_result: unknown;
+    try {
+      const cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+      parsed_result = JSON.parse(cleaned);
+    } catch {
+      req.log.error({ raw }, "Failed to parse AI response as JSON");
+      res.status(500).json({ error: "Failed to parse AI response. Please try again." });
+      return;
+    }
+
+    const result = FixResumeResponse.parse(parsed_result);
+    req.log.info({ experienceCount: result.experienceImprovements.length }, "AI resume fix complete");
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "AI resume fix failed");
+    res.status(500).json({ error: "AI improvement failed. Please try again." });
+  }
 });
 
 router.get("/resume/templates", async (_req, res): Promise<void> => {

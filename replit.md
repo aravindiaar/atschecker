@@ -27,7 +27,9 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ### API Server (`artifacts/api-server`)
 - Express 5 backend at `/api`
 - `POST /api/resume/ats-check` — keyword, format, and experience analysis
+- `POST /api/resume/fix` — AI-powered resume rewriter (uses Replit-managed OpenAI proxy); returns improved summary, skills, and per-experience bullet improvements
 - `GET /api/resume/templates` — list of resume templates
+- AI library: `lib/integrations-openai-ai-server` (Replit OpenAI integration, env: `AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY`)
 
 ## Key Commands
 

@@ -47,6 +47,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/AtsCheckResult"
 
+  /resume/fix:
+    post:
+      operationId: fixResume
+      tags: [resume]
+      summary: Fix resume using AI based on ATS results
+      description: Uses AI to rewrite and improve resume sections based on ATS analysis findings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResumeFixRequest"
+      responses:
+        "200":
+          description: AI-improved resume sections
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumeFixResult"
+
   /resume/templates:
     get:
       operationId: getResumeTemplates
@@ -126,6 +146,66 @@ components:
         - missingKeywords
         - suggestions
         - strengths
+
+    ResumeFixRequest:
+      type: object
+      properties:
+        resumeText:
+          type: string
+          description: The full plain-text resume content
+        jobDescription:
+          type: string
+          description: Optional job description used in the ATS check
+        missingKeywords:
+          type: array
+          items:
+            type: string
+          description: Keywords to incorporate from the ATS analysis
+        suggestions:
+          type: array
+          items:
+            type: string
+          description: ATS suggestions to address
+      required:
+        - resumeText
+
+    ResumeFixResult:
+      type: object
+      properties:
+        improvedSummary:
+          type: string
+          description: AI-improved professional summary
+        improvedSkills:
+          type: string
+          description: AI-improved skills section with missing keywords incorporated
+        experienceImprovements:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperienceImprovement"
+          description: Improved bullet points per experience entry
+        overallChanges:
+          type: string
+          description: Brief explanation of changes made
+      required:
+        - improvedSummary
+        - improvedSkills
+        - experienceImprovements
+        - overallChanges
+
+    ExperienceImprovement:
+      type: object
+      properties:
+        index:
+          type: integer
+          description: Index of the experience entry (0-based)
+        improvedBullets:
+          type: array
+          items:
+            type: string
+          description: Improved bullet points for this experience entry
+      required:
+        - index
+        - improvedBullets
 
     ResumeTemplate:
       type: object

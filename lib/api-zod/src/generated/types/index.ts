@@ -8,6 +8,9 @@
 
 export * from "./atsCheckRequest";
 export * from "./atsCheckResult";
+export * from "./experienceImprovement";
 export * from "./healthStatus";
+export * from "./resumeFixRequest";
+export * from "./resumeFixResult";
 export * from "./resumeTemplate";
 export * from "./resumeTemplateList";

@@ -51,6 +51,44 @@ export const AtsCheckResponse = zod.object({
 });
 
 /**
+ * Uses AI to rewrite and improve resume sections based on ATS analysis findings
+ * @summary Fix resume using AI based on ATS results
+ */
+export const FixResumeBody = zod.object({
+  resumeText: zod.string().describe("The full plain-text resume content"),
+  jobDescription: zod
+    .string()
+    .optional()
+    .describe("Optional job description used in the ATS check"),
+  missingKeywords: zod
+    .array(zod.string())
+    .optional()
+    .describe("Keywords to incorporate from the ATS analysis"),
+  suggestions: zod
+    .array(zod.string())
+    .optional()
+    .describe("ATS suggestions to address"),
+});
+
+export const FixResumeResponse = zod.object({
+  improvedSummary: zod.string().describe("AI-improved professional summary"),
+  improvedSkills: zod
+    .string()
+    .describe("AI-improved skills section with missing keywords incorporated"),
+  experienceImprovements: zod
+    .array(
+      zod.object({
+        index: zod.number().describe("Index of the experience entry (0-based)"),
+        improvedBullets: zod
+          .array(zod.string())
+          .describe("Improved bullet points for this experience entry"),
+      }),
+    )
+    .describe("Improved bullet points per experience entry"),
+  overallChanges: zod.string().describe("Brief explanation of changes made"),
+});
+
+/**
  * @summary Get available resume templates
  */
 export const GetResumeTemplatesResponse = zod.object({

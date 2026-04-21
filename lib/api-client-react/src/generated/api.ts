@@ -20,6 +20,8 @@ import type {
   AtsCheckRequest,
   AtsCheckResult,
   HealthStatus,
+  ResumeFixRequest,
+  ResumeFixResult,
   ResumeTemplateList,
 } from "./api.schemas";
 
@@ -193,6 +195,93 @@ export const useAtsCheck = <
   TContext
 > => {
   return useMutation(getAtsCheckMutationOptions(options));
+};
+
+/**
+ * Uses AI to rewrite and improve resume sections based on ATS analysis findings
+ * @summary Fix resume using AI based on ATS results
+ */
+export const getFixResumeUrl = () => {
+  return `/api/resume/fix`;
+};
+
+export const fixResume = async (
+  resumeFixRequest: ResumeFixRequest,
+  options?: RequestInit,
+): Promise<ResumeFixResult> => {
+  return customFetch<ResumeFixResult>(getFixResumeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(resumeFixRequest),
+  });
+};
+
+export const getFixResumeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof fixResume>>,
+    TError,
+    { data: BodyType<ResumeFixRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof fixResume>>,
+  TError,
+  { data: BodyType<ResumeFixRequest> },
+  TContext
+> => {
+  const mutationKey = ["fixResume"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof fixResume>>,
+    { data: BodyType<ResumeFixRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return fixResume(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type FixResumeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof fixResume>>
+>;
+export type FixResumeMutationBody = BodyType<ResumeFixRequest>;
+export type FixResumeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Fix resume using AI based on ATS results
+ */
+export const useFixResume = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof fixResume>>,
+    TError,
+    { data: BodyType<ResumeFixRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof fixResume>>,
+  TError,
+  { data: BodyType<ResumeFixRequest> },
+  TContext
+> => {
+  return useMutation(getFixResumeMutationOptions(options));
 };
 
 /**

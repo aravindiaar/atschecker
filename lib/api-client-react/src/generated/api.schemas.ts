@@ -35,6 +35,35 @@ export interface AtsCheckResult {
   strengths: string[];
 }
 
+export interface ResumeFixRequest {
+  /** The full plain-text resume content */
+  resumeText: string;
+  /** Optional job description used in the ATS check */
+  jobDescription?: string;
+  /** Keywords to incorporate from the ATS analysis */
+  missingKeywords?: string[];
+  /** ATS suggestions to address */
+  suggestions?: string[];
+}
+
+export interface ExperienceImprovement {
+  /** Index of the experience entry (0-based) */
+  index: number;
+  /** Improved bullet points for this experience entry */
+  improvedBullets: string[];
+}
+
+export interface ResumeFixResult {
+  /** AI-improved professional summary */
+  improvedSummary: string;
+  /** AI-improved skills section with missing keywords incorporated */
+  improvedSkills: string;
+  /** Improved bullet points per experience entry */
+  experienceImprovements: ExperienceImprovement[];
+  /** Brief explanation of changes made */
+  overallChanges: string;
+}
+
 export interface ResumeTemplate {
   id: string;
   name: string;
