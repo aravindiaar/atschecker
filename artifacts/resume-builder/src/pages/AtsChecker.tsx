@@ -221,16 +221,6 @@ ${resume.education}`.trim();
               </p>
             )}
 
-            <div className="flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">or</span>
-              <Separator className="flex-1" />
-            </div>
-
-            <Button variant="outline" className="w-full" onClick={useBuilderResume}>
-              <FileText className="mr-2 h-4 w-4" />
-              Use resume from Builder
-            </Button>
             {showUploader && (
               <Button variant="ghost" size="sm" className="w-full" onClick={() => setShowUploader(false)}>
                 Cancel
