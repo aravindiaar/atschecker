@@ -159,7 +159,7 @@ ${resume.education}`.trim();
         <h1 className="text-3xl font-bold tracking-tight mb-1">ATS Checker & Resume Fixer</h1>
         <p className="text-muted-foreground">Upload your resume once, then analyse, fix with AI, and re-analyse to see your score improve.</p>
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-6 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
       <div className="space-y-5">
 
       {/* ── STEP 1: Resume ── */}
@@ -846,7 +846,7 @@ function ResumePreviewPanel({
           )}
         </div>
       </CardHeader>
-      <CardContent className="pt-0 overflow-y-auto max-h-[calc(100vh-10rem)]">
+      <CardContent className="pt-0 overflow-y-auto max-h-[calc(100vh-8rem)]">
         {!text ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
