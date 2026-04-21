@@ -147,7 +147,10 @@ ${resume.education}`.trim();
   const onReAnalyse = () => {
     if (!fixResult) return;
     setReAnalysis(null);
-    runAnalysis(fixResult.improvedResumeText);
+    atsCheck.mutate(
+      { data: { resumeText: fixResult.improvedResumeText, ...(jobDescription.trim().length > 10 ? { jobDescription } : {}) } },
+      { onSuccess: (res) => setReAnalysis(res) }
+    );
   };
 
   const previewText = fixResult ? fixResult.improvedResumeText : (resumeText ?? null);
