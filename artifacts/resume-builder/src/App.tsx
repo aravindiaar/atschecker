@@ -14,8 +14,8 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/ats-checker" component={AtsChecker} />
+        <Route path="/" component={AtsChecker} />
+        <Route path="/builder" component={Home} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

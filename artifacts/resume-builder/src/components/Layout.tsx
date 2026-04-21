@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, FileCheck } from "lucide-react";
+import { FileCheck } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -18,17 +18,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 href="/"
                 className={`transition-colors hover:text-foreground/80 ${
                   location === "/" ? "text-foreground" : "text-foreground/60"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <LayoutDashboard className="h-4 w-4" />
-                  <span>Builder</span>
-                </div>
-              </Link>
-              <Link
-                href="/ats-checker"
-                className={`transition-colors hover:text-foreground/80 ${
-                  location === "/ats-checker" ? "text-foreground" : "text-foreground/60"
                 }`}
               >
                 <div className="flex items-center gap-2">
