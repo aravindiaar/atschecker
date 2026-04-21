@@ -4,14 +4,14 @@ import { useResume } from "@/store/ResumeContext";
 import { useResumeStore } from "@/hooks/useResumeStore";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   CheckCircle, XCircle, AlertCircle, Sparkles, Loader2,
   Upload, FileText, Wand2, ArrowRight, Check, RotateCcw,
-  TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp,
+  TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Eye, EyeOff,
 } from "lucide-react";
 
 export default function AtsChecker() {
@@ -33,6 +33,8 @@ export default function AtsChecker() {
   const [appliedSections, setAppliedSections] = useState<Set<string>>(new Set());
 
   const [showFixDetails, setShowFixDetails] = useState(true);
+  const [showResumePreview, setShowResumePreview] = useState(true);
+  const [showFixedPreview, setShowFixedPreview] = useState(true);
 
   const activeResume = resumeText;
   const hasResume = hydrated && !!activeResume;
@@ -226,6 +228,15 @@ ${resume.education}`.trim();
             )}
           </div>
         )}
+
+        {hasResume && !showUploader && (
+          <TextPreview
+            text={activeResume!}
+            label="Extracted resume text"
+            show={showResumePreview}
+            onToggle={() => setShowResumePreview(v => !v)}
+          />
+        )}
       </StepCard>
 
       {/* ── STEP 2: Analyse ── */}
@@ -298,26 +309,38 @@ ${resume.education}`.trim();
             </Button>
           </div>
         ) : (
-          showFixDetails && fixResult && (
+          fixResult && (
             <div className="space-y-3 mt-1">
-              <p className="text-sm text-muted-foreground bg-primary/5 border border-primary/15 rounded-lg p-3">
-                {fixResult.overallChanges}
-              </p>
-              <FixSection label="Professional Summary" before={analysis!.strengths[0] ? resumeText?.substring(0, 400) ?? "" : ""} after={fixResult.improvedSummary} originalText={resumeText ?? ""} sectionKey="summary" applied={appliedSections.has("summary")} onApply={() => applySection("summary")} />
-              <FixSection label="Skills" before="" after={fixResult.improvedSkills} originalText="" sectionKey="skills" applied={appliedSections.has("skills")} onApply={() => applySection("skills")} showBefore={false} />
-              {fixResult.experienceImprovements.map((imp) => (
-                <FixSection
-                  key={`exp-${imp.index}`}
-                  label={`Experience #${imp.index + 1}`}
-                  before=""
-                  after={imp.improvedBullets.map(b => `• ${b}`).join("\n")}
-                  originalText=""
-                  sectionKey={`exp-${imp.index}`}
-                  applied={appliedSections.has(`exp-${imp.index}`)}
-                  onApply={() => applySection(`exp-${imp.index}`)}
-                  showBefore={false}
-                />
-              ))}
+              {showFixDetails && (
+                <>
+                  <p className="text-sm text-muted-foreground bg-primary/5 border border-primary/15 rounded-lg p-3">
+                    {fixResult.overallChanges}
+                  </p>
+                  <FixSection label="Professional Summary" before={analysis!.strengths[0] ? resumeText?.substring(0, 400) ?? "" : ""} after={fixResult.improvedSummary} originalText={resumeText ?? ""} sectionKey="summary" applied={appliedSections.has("summary")} onApply={() => applySection("summary")} />
+                  <FixSection label="Skills" before="" after={fixResult.improvedSkills} originalText="" sectionKey="skills" applied={appliedSections.has("skills")} onApply={() => applySection("skills")} showBefore={false} />
+                  {fixResult.experienceImprovements.map((imp) => (
+                    <FixSection
+                      key={`exp-${imp.index}`}
+                      label={`Experience #${imp.index + 1}`}
+                      before=""
+                      after={imp.improvedBullets.map(b => `• ${b}`).join("\n")}
+                      originalText=""
+                      sectionKey={`exp-${imp.index}`}
+                      applied={appliedSections.has(`exp-${imp.index}`)}
+                      onApply={() => applySection(`exp-${imp.index}`)}
+                      showBefore={false}
+                    />
+                  ))}
+                </>
+              )}
+              <Separator />
+              <TextPreview
+                text={fixResult.improvedResumeText}
+                label="Full improved resume text"
+                show={showFixedPreview}
+                onToggle={() => setShowFixedPreview(v => !v)}
+                accent
+              />
             </div>
           )
         )}
@@ -391,11 +414,9 @@ function StepCard({ step, title, locked, done, summary, children }: {
           </div>
         </div>
       </CardHeader>
-      {(!done || step === 2 || step === 3 || step === 4) && (
-        <CardContent className="pt-0">
-          {children}
-        </CardContent>
-      )}
+      <CardContent className="pt-0">
+        {children}
+      </CardContent>
     </Card>
   );
 }
@@ -516,6 +537,37 @@ function FixSection({ label, after, sectionKey, applied, onApply, showBefore = t
           {after}
         </div>
       </div>
+    </div>
+  );
+}
+
+function TextPreview({ text, label, show, onToggle, accent = false }: {
+  text: string;
+  label: string;
+  show: boolean;
+  onToggle: () => void;
+  accent?: boolean;
+}) {
+  return (
+    <div className={`rounded-lg border ${accent ? "border-primary/25 bg-primary/5" : "border-border bg-muted/20"}`}>
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-muted/30 transition-colors rounded-lg"
+      >
+        <span className={`flex items-center gap-2 text-sm font-medium ${accent ? "text-primary" : "text-foreground"}`}>
+          {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          {label}
+          <span className="text-xs font-normal text-muted-foreground">({text.split("\n").length} lines)</span>
+        </span>
+        {show ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+      {show && (
+        <div className="px-3 pb-3">
+          <pre className={`text-xs leading-relaxed whitespace-pre-wrap font-mono max-h-72 overflow-y-auto rounded-md p-3 border ${accent ? "bg-white dark:bg-background border-primary/15 text-foreground" : "bg-background border-border text-muted-foreground"}`}>
+            {text}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
