@@ -195,14 +195,17 @@ router.post("/resume/ats-check", async (req, res): Promise<void> => {
       }
     }
 
+    // Score based on raw counts BEFORE slicing/filtering (avoids denominator distortion)
+    const eligibleTotal = matched.length + missing.length;
+    keywordScore = eligibleTotal > 0
+      ? Math.round((matched.length / eligibleTotal) * 100)
+      : 70;
+
+    // Sliced/filtered lists are for display only
     uniqueMatched = [...new Set(matched)].slice(0, 30);
     uniqueMissing = [...new Set(missing)]
       .filter((k) => !STOP_WORDS.has(k) && k.length > 2)
       .slice(0, 20);
-
-    keywordScore = jobKeywords.size > 0
-      ? Math.round((uniqueMatched.length / Math.min(jobKeywords.size, uniqueMatched.length + uniqueMissing.length)) * 100)
-      : 70;
 
     if (uniqueMissing.length > 0) {
       suggestions.push(`Add these missing keywords to your resume: ${uniqueMissing.slice(0, 5).join(", ")}`);
@@ -332,7 +335,9 @@ Rules:
 - Keep the tone professional and concise
 - Naturally incorporate relevant missing keywords without keyword stuffing
 - Include improvements for ALL experience entries found in the resume
-- improvedResumeText must be the complete resume text with all improvements incorporated`;
+- improvedResumeText must be the complete resume text with all improvements incorporated
+- CRITICAL for improvedResumeText: preserve every specific technology name, framework, and tool from the original resume exactly as written — never replace specific terms (e.g. "ASP.NET Core Web API", ".NET Core", "Azure DevOps") with generic alternatives. You may ADD keywords but never remove or genericise existing ones.
+- In improvedResumeText, the Technical Skills line must include ALL skills from the original, plus any missing JD keywords that are truthfully applicable`;
 
   req.log.info("Starting AI resume fix");
 
