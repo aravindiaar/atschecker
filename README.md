@@ -2,6 +2,9 @@
 
 ResumePro is a full-stack web application that helps job seekers create professional resumes and optimise them for Applicant Tracking Systems (ATS). It combines a live resume editor with an AI-driven analysis and rewriting engine.
 
+## Demo Video
+[Watch Demo](https://github.com/yourusername/repo/blob/main/demo.mp4)
+
 ---
 
 ## Features
