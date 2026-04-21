@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "ZSRvQrSLX3mDndU7QlK5E"
+uri = "file://README.md"
+type = "text"
+title = "README.md — ResumePro"
