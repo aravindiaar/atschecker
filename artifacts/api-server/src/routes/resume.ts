@@ -364,6 +364,33 @@ Rules:
   }
 });
 
+function htmlToResumeText(html: string): string {
+  let t = html;
+  t = t.replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (_m: string, c: string) =>
+    `\n\n${c.replace(/<[^>]+>/g, "").trim().toUpperCase()}\n`
+  );
+  t = t.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_m: string, c: string) =>
+    `• ${c.replace(/<[^>]+>/g, "").trim()}\n`
+  );
+  t = t.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, (_m: string, c: string) =>
+    `${c.replace(/<[^>]+>/g, "").trim()}\n`
+  );
+  t = t.replace(/<br\s*\/?>/gi, "\n");
+  t = t.replace(/<[^>]+>/g, "");
+  t = t
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x2013;/g, "–")
+    .replace(/&#x2014;/g, "—")
+    .replace(/&#x2019;/g, "'");
+  t = t.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  return t;
+}
+
 router.post("/resume/parse", upload.single("file"), async (req, res): Promise<void> => {
   const file = req.file;
   if (!file) {
@@ -383,8 +410,8 @@ router.post("/resume/parse", upload.single("file"), async (req, res): Promise<vo
       const pdfData = await pdfParse(file.buffer);
       text = pdfData.text;
     } else if (isDocx) {
-      const result = await mammoth.extractRawText({ buffer: file.buffer });
-      text = result.value;
+      const result = await mammoth.convertToHtml({ buffer: file.buffer });
+      text = htmlToResumeText(result.value);
     } else {
       text = file.buffer.toString("utf-8");
     }

@@ -592,13 +592,20 @@ function isBulletLine(t: string): boolean {
   return (BULLET_CHAR_RE.test(t) && t.length > 1) || /^\d+[.)]\s/.test(t);
 }
 
+/** Scans backward through parsed lines to find the last non-spacer type. */
+function lastMeaningfulType(lines: ResumeLine[]): ResumeLine["type"] | null {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].type !== "spacer") return lines[i].type;
+  }
+  return null;
+}
+
 function parseResumeText(text: string): ResumeLine[] {
   const rawLines = text.split("\n");
   const result: ResumeLine[] = [];
   let phase: "header" | "body" = "header";
   let nameSet = false;
   let headerLinesSinceTitle = 0;
-  let lastNonSpacerType: ResumeLine["type"] | null = null;
 
   for (const raw of rawLines) {
     const t = raw.trim();
@@ -613,14 +620,12 @@ function parseResumeText(text: string): ResumeLine[] {
       if (!nameSet) {
         nameSet = true;
         result.push({ type: "name", content: t });
-        lastNonSpacerType = "name";
         continue;
       }
 
       if (isSectionHeader(t)) {
         phase = "body";
         result.push({ type: "section", content: t });
-        lastNonSpacerType = "section";
         continue;
       }
 
@@ -630,24 +635,20 @@ function parseResumeText(text: string): ResumeLine[] {
       if (isParagraph) {
         phase = "body";
         result.push({ type: "body", content: t });
-        lastNonSpacerType = "body";
         continue;
       }
 
       if (looksLikeContact(t)) {
         result.push({ type: "contact", content: t });
-        lastNonSpacerType = "contact";
       } else {
         headerLinesSinceTitle++;
         // Only the very first non-contact short line is treated as the job title.
         // Everything beyond that (summary paragraphs, work-rights notes, etc.) is body.
         if (headerLinesSinceTitle === 1) {
           result.push({ type: "title", content: t });
-          lastNonSpacerType = "title";
         } else {
           phase = "body";
           result.push({ type: "body", content: t });
-          lastNonSpacerType = "body";
         }
       }
       continue;
@@ -656,36 +657,35 @@ function parseResumeText(text: string): ResumeLine[] {
     // ── Body phase ─────────────────────────────────────────────
     if (isSectionHeader(t)) {
       result.push({ type: "section", content: t });
-      lastNonSpacerType = "section";
       continue;
     }
 
     if (isBulletLine(t)) {
       result.push({ type: "bullet", content: stripBullet(t) });
-      lastNonSpacerType = "bullet";
       continue;
     }
 
-    if (lastNonSpacerType === "section") {
+    // Scan backwards so blank lines between a section header and its first
+    // role entry (common in DOCX) do not break role / role-meta detection.
+    const prev = lastMeaningfulType(result);
+
+    if (prev === "section") {
       result.push({ type: "role", content: t });
-      lastNonSpacerType = "role";
       continue;
     }
 
-    if (lastNonSpacerType === "role" || lastNonSpacerType === "role-meta") {
+    if (prev === "role" || prev === "role-meta") {
       const looksLikeMeta =
         t.length < 90 &&
         (/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Present|\d{4})\b/.test(t) ||
           /\b(Remote|Hybrid|On-?site|New Zealand|Auckland|Wellington|Hamilton|Sydney|USA|UK)\b/i.test(t));
       if (looksLikeMeta) {
         result.push({ type: "role-meta", content: t });
-        lastNonSpacerType = "role-meta";
         continue;
       }
     }
 
     result.push({ type: "body", content: t });
-    lastNonSpacerType = "body";
   }
 
   return result;
@@ -695,35 +695,36 @@ async function generateDocx(lines: ResumeLine[], outputName: string): Promise<vo
   const children: Paragraph[] = [];
 
   for (const line of lines) {
-    if (line.type === "spacer") {
-      children.push(new Paragraph({ spacing: { before: 60, after: 60 } }));
-      continue;
-    }
+    // Spacers are expressed via paragraph spacing — no empty paragraphs needed
+    if (line.type === "spacer") continue;
+
     if (line.type === "name") {
       children.push(new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 60 },
-        children: [new TextRun({ text: line.content, bold: true, size: 40, font: "Calibri" })],
+        spacing: { before: 0, after: 80 },
+        children: [new TextRun({ text: line.content, bold: true, size: 44, font: "Calibri", color: "1A1A1A" })],
       }));
       continue;
     }
     if (line.type === "title") {
       children.push(new Paragraph({
-        spacing: { after: 40 },
-        children: [new TextRun({ text: line.content, bold: true, size: 22, font: "Calibri", color: "333333" })],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 60 },
+        children: [new TextRun({ text: line.content, bold: true, size: 22, font: "Calibri", color: "2B579A" })],
       }));
       continue;
     }
     if (line.type === "contact") {
       children.push(new Paragraph({
-        spacing: { after: 30 },
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 40 },
         children: [new TextRun({ text: line.content, size: 18, font: "Calibri", color: "555555" })],
       }));
       continue;
     }
     if (line.type === "section") {
       children.push(new Paragraph({
-        spacing: { before: 240, after: 80 },
+        spacing: { before: 260, after: 100 },
         border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "2B579A", space: 4 } },
         children: [new TextRun({ text: line.content, bold: true, size: 22, allCaps: true, font: "Calibri", color: "2B579A" })],
       }));
@@ -731,29 +732,30 @@ async function generateDocx(lines: ResumeLine[], outputName: string): Promise<vo
     }
     if (line.type === "role") {
       children.push(new Paragraph({
-        spacing: { before: 120, after: 40 },
-        children: [new TextRun({ text: line.content, bold: true, size: 20, font: "Calibri" })],
+        spacing: { before: 140, after: 40 },
+        children: [new TextRun({ text: line.content, bold: true, size: 21, font: "Calibri", color: "1A1A1A" })],
       }));
       continue;
     }
     if (line.type === "role-meta") {
       children.push(new Paragraph({
-        spacing: { after: 60 },
-        children: [new TextRun({ text: line.content, size: 18, italics: true, font: "Calibri", color: "666666" })],
+        spacing: { before: 0, after: 80 },
+        children: [new TextRun({ text: line.content, size: 19, italics: true, font: "Calibri", color: "555555" })],
       }));
       continue;
     }
     if (line.type === "bullet") {
       children.push(new Paragraph({
         bullet: { level: 0 },
-        spacing: { after: 40 },
-        children: [new TextRun({ text: line.content, size: 20, font: "Calibri" })],
+        spacing: { before: 0, after: 40 },
+        children: [new TextRun({ text: line.content, size: 20, font: "Calibri", color: "1A1A1A" })],
       }));
       continue;
     }
+    // body / fallback
     children.push(new Paragraph({
-      spacing: { after: 60 },
-      children: [new TextRun({ text: (line as { type: string; content: string }).content, size: 20, font: "Calibri" })],
+      spacing: { before: 0, after: 60 },
+      children: [new TextRun({ text: (line as { type: string; content: string }).content, size: 20, font: "Calibri", color: "333333" })],
     }));
   }
 
@@ -762,6 +764,7 @@ async function generateDocx(lines: ResumeLine[], outputName: string): Promise<vo
       default: {
         document: {
           run: { font: "Calibri", size: 20 },
+          paragraph: { spacing: { line: 276 } },
         },
       },
     },
@@ -802,7 +805,7 @@ function ResumePreviewPanel({
     if (!text) return;
     setIsDownloading(true);
     try {
-      const base = (filename ?? "resume").replace(/\.(pdf|txt)$/i, "");
+      const base = (filename ?? "resume").replace(/\.(pdf|docx|txt)$/i, "");
       const outputName = isImproved ? `${base}_AI_improved.docx` : `${base}.docx`;
       await generateDocx(lines, outputName);
     } finally {
@@ -852,28 +855,28 @@ function ResumePreviewPanel({
         ) : (
           <div className="text-[12.5px] leading-relaxed">
             {lines.map((line, i) => {
-              if (line.type === "spacer") return <div key={i} className="h-2" />;
+              if (line.type === "spacer") return <div key={i} className="h-1" />;
 
               if (line.type === "name") return (
-                <h1 key={i} className="text-[20px] font-bold text-foreground tracking-tight leading-tight mb-1">
+                <h1 key={i} className="text-[22px] font-bold text-foreground tracking-tight leading-tight mb-1 text-center">
                   {line.content}
                 </h1>
               );
 
               if (line.type === "title") return (
-                <p key={i} className="text-[12px] font-semibold text-foreground/75 mb-0.5">
+                <p key={i} className="text-[12px] font-semibold text-primary/80 mb-0.5 text-center">
                   {line.content}
                 </p>
               );
 
               if (line.type === "contact") return (
-                <p key={i} className="text-[11px] text-muted-foreground leading-snug">
+                <p key={i} className="text-[11px] text-muted-foreground leading-snug text-center">
                   {line.content}
                 </p>
               );
 
               if (line.type === "section") return (
-                <div key={i} className="mt-4 mb-1.5 border-b border-primary/25 pb-0.5">
+                <div key={i} className="mt-4 mb-1.5 border-b border-primary/30 pb-0.5">
                   <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-primary">
                     {line.content}
                   </p>
@@ -887,7 +890,7 @@ function ResumePreviewPanel({
               );
 
               if (line.type === "role-meta") return (
-                <p key={i} className="text-[11px] text-muted-foreground mb-0.5">
+                <p key={i} className="text-[11px] italic text-muted-foreground mb-1">
                   {line.content}
                 </p>
               );
