@@ -186,11 +186,15 @@ components:
         overallChanges:
           type: string
           description: Brief explanation of changes made
+        improvedResumeText:
+          type: string
+          description: Full improved resume as plain text, ready for re-analysis
       required:
         - improvedSummary
         - improvedSkills
         - experienceImprovements
         - overallChanges
+        - improvedResumeText
 
     ExperienceImprovement:
       type: object

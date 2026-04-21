@@ -1,6 +1,11 @@
 import { Router } from "express";
+import multer from "multer";
+// Import the internal lib to avoid the test-file bug in pdf-parse@1.1.1 root index
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { AtsCheckBody, AtsCheckResponse, FixResumeBody, FixResumeResponse, GetResumeTemplatesResponse } from "@workspace/api-zod";
 import { openai } from "@workspace/integrations-openai-ai-server";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -316,7 +321,8 @@ Return ONLY a JSON object with this exact structure (no markdown, no backticks):
       "improvedBullets": ["improved bullet 1", "improved bullet 2", "..."]
     }
   ],
-  "overallChanges": "brief 2-3 sentence explanation of what was improved and why"
+  "overallChanges": "brief 2-3 sentence explanation of what was improved and why",
+  "improvedResumeText": "the full rewritten resume as plain text, with all improvements applied — preserve the general structure and headings from the original but replace the relevant sections with the improved content"
 }
 
 Rules:
@@ -324,7 +330,8 @@ Rules:
 - Make bullet points start with strong action verbs and include measurable results where possible
 - Keep the tone professional and concise
 - Naturally incorporate relevant missing keywords without keyword stuffing
-- Include improvements for ALL experience entries found in the resume`;
+- Include improvements for ALL experience entries found in the resume
+- improvedResumeText must be the complete resume text with all improvements incorporated`;
 
   req.log.info("Starting AI resume fix");
 
@@ -353,6 +360,36 @@ Rules:
   } catch (err) {
     req.log.error({ err }, "AI resume fix failed");
     res.status(500).json({ error: "AI improvement failed. Please try again." });
+  }
+});
+
+router.post("/resume/parse", upload.single("file"), async (req, res): Promise<void> => {
+  const file = req.file;
+  if (!file) {
+    res.status(400).json({ error: "No file uploaded." });
+    return;
+  }
+
+  try {
+    let text = "";
+    if (file.mimetype === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf")) {
+      const pdfData = await pdfParse(file.buffer);
+      text = pdfData.text;
+    } else {
+      text = file.buffer.toString("utf-8");
+    }
+
+    text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    if (!text || text.length < 50) {
+      res.status(400).json({ error: "Could not extract text from the file. Please try a different file." });
+      return;
+    }
+
+    req.log.info({ bytes: text.length, filename: file.originalname }, "Resume parsed");
+    res.json({ text, filename: file.originalname });
+  } catch (err) {
+    req.log.error({ err }, "Failed to parse resume file");
+    res.status(500).json({ error: "Failed to parse the file. Please try a text (.txt) file instead." });
   }
 });
 

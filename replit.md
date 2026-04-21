@@ -21,13 +21,14 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ### Resume Builder & ATS Checker (`artifacts/resume-builder`)
 - React + Vite frontend at `/`
 - Two-panel resume builder (editor + live preview)
-- ATS Checker page at `/ats-checker` — paste a job description and get a detailed compatibility score
-- Pre-filled with Aravind's resume data
+- ATS Checker page at `/ats-checker` — 4-step flow: Upload resume (PDF/TXT, saved to localStorage) → Analyse → Fix with AI → Re-Analyse
+- Pre-filled with Aravind's resume data; Builder resume can be loaded into ATS checker
 
 ### API Server (`artifacts/api-server`)
 - Express 5 backend at `/api`
 - `POST /api/resume/ats-check` — keyword, format, and experience analysis
-- `POST /api/resume/fix` — AI-powered resume rewriter (uses Replit-managed OpenAI proxy); returns improved summary, skills, and per-experience bullet improvements
+- `POST /api/resume/parse` — parse uploaded PDF/TXT file and return extracted text (multer + pdf-parse@1.1.1 via lib path to avoid test-file bug)
+- `POST /api/resume/fix` — AI-powered resume rewriter (uses Replit-managed OpenAI proxy); returns improved summary, skills, experience bullets, and full improved text
 - `GET /api/resume/templates` — list of resume templates
 - AI library: `lib/integrations-openai-ai-server` (Replit OpenAI integration, env: `AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY`)
 

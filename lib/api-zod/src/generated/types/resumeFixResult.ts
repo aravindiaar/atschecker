@@ -16,4 +16,6 @@ export interface ResumeFixResult {
   experienceImprovements: ExperienceImprovement[];
   /** Brief explanation of changes made */
   overallChanges: string;
+  /** Full improved resume as plain text, ready for re-analysis */
+  improvedResumeText: string;
 }

@@ -86,6 +86,9 @@ export const FixResumeResponse = zod.object({
     )
     .describe("Improved bullet points per experience entry"),
   overallChanges: zod.string().describe("Brief explanation of changes made"),
+  improvedResumeText: zod
+    .string()
+    .describe("Full improved resume as plain text, ready for re-analysis"),
 });
 
 /**
