@@ -11,8 +11,12 @@ import { Separator } from "@/components/ui/separator";
 import {
   CheckCircle, XCircle, AlertCircle, Sparkles, Loader2,
   Upload, FileText, Wand2, ArrowRight, Check, RotateCcw,
-  TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp,
+  TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Download,
 } from "lucide-react";
+import {
+  Document, Packer, Paragraph, TextRun, AlignmentType,
+  BorderStyle,
+} from "docx";
 
 export default function AtsChecker() {
   const { resume } = useResume();
@@ -541,72 +545,209 @@ function FixSection({ label, after, sectionKey, applied, onApply, showBefore = t
 
 type ResumeLine =
   | { type: "name"; content: string }
+  | { type: "title"; content: string }
   | { type: "contact"; content: string }
   | { type: "section"; content: string }
   | { type: "role"; content: string }
+  | { type: "role-meta"; content: string }
   | { type: "bullet"; content: string }
   | { type: "spacer" }
   | { type: "body"; content: string };
 
+function looksLikeContact(line: string): boolean {
+  return (
+    /@[a-zA-Z]/.test(line) ||
+    /\+?\d[\d\s\-().]{6,}/.test(line) ||
+    /linkedin|github|http:|https:|www\./i.test(line) ||
+    /nuget|stackoverflow|behance|dribbble/i.test(line) ||
+    /\.(com|io|nz|org|net|co)\b/i.test(line)
+  );
+}
+
+function isSectionHeader(line: string): boolean {
+  const up = line.toUpperCase();
+  return (
+    up === line &&
+    line.length >= 3 &&
+    line.length <= 55 &&
+    /^[A-Z]/.test(line) &&
+    !/^[•\-*\d]/.test(line) &&
+    line.replace(/[^A-Z]/g, "").length >= 2
+  );
+}
+
 function parseResumeText(text: string): ResumeLine[] {
   const rawLines = text.split("\n");
-  const lines: ResumeLine[] = [];
-  let nameFound = false;
-  let contactLineCount = 0;
-  let inHeader = true;
+  const result: ResumeLine[] = [];
+  let phase: "header" | "body" = "header";
+  let nameSet = false;
+  let lastNonSpacerType: ResumeLine["type"] | null = null;
 
-  for (let i = 0; i < rawLines.length; i++) {
-    const raw = rawLines[i];
-    const trimmed = raw.trim();
+  for (const raw of rawLines) {
+    const t = raw.trim();
 
-    if (!trimmed) {
-      if (inHeader) inHeader = false;
-      lines.push({ type: "spacer" });
+    if (!t) {
+      if (phase === "header" && nameSet) phase = "body";
+      result.push({ type: "spacer" });
       continue;
     }
 
-    if (!nameFound) {
-      nameFound = true;
-      lines.push({ type: "name", content: trimmed });
+    if (phase === "header") {
+      if (!nameSet) {
+        nameSet = true;
+        result.push({ type: "name", content: t });
+        lastNonSpacerType = "name";
+        continue;
+      }
+      if (isSectionHeader(t)) {
+        phase = "body";
+        result.push({ type: "section", content: t });
+        lastNonSpacerType = "section";
+        continue;
+      }
+      if (looksLikeContact(t)) {
+        result.push({ type: "contact", content: t });
+        lastNonSpacerType = "contact";
+      } else {
+        result.push({ type: "title", content: t });
+        lastNonSpacerType = "title";
+      }
       continue;
     }
 
-    if (inHeader && contactLineCount < 4) {
-      contactLineCount++;
-      lines.push({ type: "contact", content: trimmed });
+    if (isSectionHeader(t)) {
+      result.push({ type: "section", content: t });
+      lastNonSpacerType = "section";
       continue;
     }
 
-    inHeader = false;
-
-    const isSectionHeader =
-      trimmed === trimmed.toUpperCase() &&
-      trimmed.length < 50 &&
-      /^[A-Z]/.test(trimmed) &&
-      !/^[•\-*]/.test(trimmed);
-
-    const isBullet = /^[•\-*]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed);
-
-    const isRole =
-      !isSectionHeader &&
-      !isBullet &&
-      trimmed.length < 80 &&
-      /[|,@]/.test(trimmed) &&
-      lines.length > 0 &&
-      lines[lines.length - 1].type === "section";
-
-    if (isSectionHeader) {
-      lines.push({ type: "section", content: trimmed });
-    } else if (isBullet) {
-      lines.push({ type: "bullet", content: trimmed.replace(/^[•\-*]\s*/, "") });
-    } else if (isRole) {
-      lines.push({ type: "role", content: trimmed });
-    } else {
-      lines.push({ type: "body", content: trimmed });
+    const isBullet = /^[•\-*]\s/.test(t) || /^\d+\.\s/.test(t);
+    if (isBullet) {
+      result.push({ type: "bullet", content: t.replace(/^[•\-*]\d*\.\s*/, "").replace(/^[\-*]\s*/, "") });
+      lastNonSpacerType = "bullet";
+      continue;
     }
+
+    if (lastNonSpacerType === "section") {
+      result.push({ type: "role", content: t });
+      lastNonSpacerType = "role";
+      continue;
+    }
+
+    if (lastNonSpacerType === "role") {
+      const looksLikeMeta =
+        t.length < 80 &&
+        (/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Present|\d{4})\b/.test(t) ||
+          /\b(Remote|Hybrid|On-?site|New Zealand|Auckland|Wellington|Hamilton|USA|UK)\b/i.test(t));
+      if (looksLikeMeta) {
+        result.push({ type: "role-meta", content: t });
+        lastNonSpacerType = "role-meta";
+        continue;
+      }
+    }
+
+    result.push({ type: "body", content: t });
+    lastNonSpacerType = "body";
   }
 
-  return lines;
+  return result;
+}
+
+async function generateDocx(lines: ResumeLine[], outputName: string): Promise<void> {
+  const children: Paragraph[] = [];
+
+  for (const line of lines) {
+    if (line.type === "spacer") {
+      children.push(new Paragraph({ spacing: { before: 60, after: 60 } }));
+      continue;
+    }
+    if (line.type === "name") {
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 60 },
+        children: [new TextRun({ text: line.content, bold: true, size: 40, font: "Calibri" })],
+      }));
+      continue;
+    }
+    if (line.type === "title") {
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 40 },
+        children: [new TextRun({ text: line.content, size: 22, italics: true, font: "Calibri", color: "444444" })],
+      }));
+      continue;
+    }
+    if (line.type === "contact") {
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 40 },
+        children: [new TextRun({ text: line.content, size: 18, font: "Calibri", color: "555555" })],
+      }));
+      continue;
+    }
+    if (line.type === "section") {
+      children.push(new Paragraph({
+        spacing: { before: 240, after: 80 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "2B579A", space: 4 } },
+        children: [new TextRun({ text: line.content, bold: true, size: 22, allCaps: true, font: "Calibri", color: "2B579A" })],
+      }));
+      continue;
+    }
+    if (line.type === "role") {
+      children.push(new Paragraph({
+        spacing: { before: 120, after: 40 },
+        children: [new TextRun({ text: line.content, bold: true, size: 20, font: "Calibri" })],
+      }));
+      continue;
+    }
+    if (line.type === "role-meta") {
+      children.push(new Paragraph({
+        spacing: { after: 60 },
+        children: [new TextRun({ text: line.content, size: 18, italics: true, font: "Calibri", color: "666666" })],
+      }));
+      continue;
+    }
+    if (line.type === "bullet") {
+      children.push(new Paragraph({
+        bullet: { level: 0 },
+        spacing: { after: 40 },
+        children: [new TextRun({ text: line.content, size: 20, font: "Calibri" })],
+      }));
+      continue;
+    }
+    children.push(new Paragraph({
+      spacing: { after: 60 },
+      children: [new TextRun({ text: (line as { type: string; content: string }).content, size: 20, font: "Calibri" })],
+    }));
+  }
+
+  const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: "Calibri", size: 20 },
+        },
+      },
+    },
+    sections: [{
+      properties: {
+        page: {
+          margin: { top: 720, bottom: 720, left: 864, right: 864 },
+        },
+      },
+      children,
+    }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = outputName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function ResumePreviewPanel({
@@ -618,22 +759,51 @@ function ResumePreviewPanel({
   isImproved: boolean;
   filename: string | null;
 }) {
+  const [isDownloading, setIsDownloading] = React.useState(false);
   const lines = text ? parseResumeText(text) : [];
+
+  const handleDownload = async () => {
+    if (!text) return;
+    setIsDownloading(true);
+    try {
+      const base = (filename ?? "resume").replace(/\.(pdf|txt)$/i, "");
+      const outputName = isImproved ? `${base}_AI_improved.docx` : `${base}.docx`;
+      await generateDocx(lines, outputName);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <Card className="flex flex-col">
       <CardHeader className="pb-3 flex-shrink-0">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Resume Preview
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Resume Preview
+            </CardTitle>
+            {text && (
+              <Badge
+                variant="outline"
+                className={`text-[11px] ${isImproved ? "border-primary/40 text-primary bg-primary/5" : "border-border"}`}
+              >
+                {isImproved ? <><Sparkles className="h-2.5 w-2.5 mr-1" />AI Improved</> : filename ?? "Uploaded"}
+              </Badge>
+            )}
+          </div>
           {text && (
-            <Badge
+            <Button
+              size="sm"
               variant="outline"
-              className={`text-[11px] ${isImproved ? "border-primary/40 text-primary bg-primary/5" : "border-border"}`}
+              className="h-7 text-xs gap-1.5"
+              onClick={handleDownload}
+              disabled={isDownloading}
             >
-              {isImproved ? <><Sparkles className="h-2.5 w-2.5 mr-1" />AI Improved</> : filename ?? "Uploaded"}
-            </Badge>
+              {isDownloading
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <Download className="h-3 w-3" />}
+              Download DOCX
+            </Button>
           )}
         </div>
       </CardHeader>
@@ -644,30 +814,60 @@ function ResumePreviewPanel({
             <p className="text-sm text-muted-foreground">Upload a resume to see the preview</p>
           </div>
         ) : (
-          <div className="space-y-0.5 text-[13px] leading-relaxed">
+          <div className="text-[12.5px] leading-relaxed">
             {lines.map((line, i) => {
-              if (line.type === "spacer") return <div key={i} className="h-2" />;
+              if (line.type === "spacer") return <div key={i} className="h-2.5" />;
+
               if (line.type === "name") return (
-                <h1 key={i} className="text-xl font-bold text-foreground tracking-tight mb-0.5">{line.content}</h1>
+                <h1 key={i} className="text-[22px] font-bold text-foreground tracking-tight leading-tight text-center mb-0.5">
+                  {line.content}
+                </h1>
               );
+
+              if (line.type === "title") return (
+                <p key={i} className="text-[13px] font-medium text-foreground/70 text-center italic mb-0.5">
+                  {line.content}
+                </p>
+              );
+
               if (line.type === "contact") return (
-                <p key={i} className="text-xs text-muted-foreground">{line.content}</p>
+                <p key={i} className="text-[11px] text-muted-foreground text-center leading-snug">
+                  {line.content}
+                </p>
               );
+
               if (line.type === "section") return (
-                <div key={i} className="mt-4 mb-1.5">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-primary border-b border-primary/20 pb-0.5">{line.content}</p>
+                <div key={i} className="mt-4 mb-1.5 border-b border-primary/25 pb-0.5">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-primary">
+                    {line.content}
+                  </p>
                 </div>
               );
+
               if (line.type === "role") return (
-                <p key={i} className="text-xs font-semibold text-foreground/70 mb-0.5">{line.content}</p>
+                <p key={i} className="font-semibold text-[12.5px] text-foreground mt-2 mb-0">
+                  {line.content}
+                </p>
               );
+
+              if (line.type === "role-meta") return (
+                <p key={i} className="text-[11px] text-muted-foreground italic mb-0.5">
+                  {line.content}
+                </p>
+              );
+
               if (line.type === "bullet") return (
-                <div key={i} className="flex gap-2 items-start">
-                  <span className="text-primary/60 mt-px flex-shrink-0 text-[10px]">▸</span>
-                  <p className="text-foreground/80">{line.content}</p>
+                <div key={i} className="flex gap-1.5 items-start ml-1 mt-0.5">
+                  <span className="text-primary/50 flex-shrink-0 mt-[3px] text-[9px]">▸</span>
+                  <p className="text-foreground/80 leading-snug">{line.content}</p>
                 </div>
               );
-              return <p key={i} className="text-foreground/80">{line.content}</p>;
+
+              return (
+                <p key={i} className="text-foreground/75 leading-snug mt-0.5">
+                  {line.content}
+                </p>
+              );
             })}
           </div>
         )}
