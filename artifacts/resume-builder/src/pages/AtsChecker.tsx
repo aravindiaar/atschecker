@@ -802,7 +802,21 @@ function ResumePreviewPanel({
   filename: string | null;
 }) {
   const [isDownloading, setIsDownloading] = React.useState(false);
+  const [flashKey, setFlashKey] = React.useState(0);
+  const [flashing, setFlashing] = React.useState(false);
+  const prevIsImproved = React.useRef(false);
   const lines = text ? parseResumeText(text) : [];
+
+  React.useEffect(() => {
+    if (isImproved && !prevIsImproved.current) {
+      setFlashKey(k => k + 1);
+      setFlashing(true);
+      const maxDelay = lines.length * 28 + 1100;
+      const t = setTimeout(() => setFlashing(false), maxDelay);
+      return () => clearTimeout(t);
+    }
+    prevIsImproved.current = isImproved;
+  }, [isImproved, lines.length]);
 
   const handleDownload = async () => {
     if (!text) return;
@@ -858,28 +872,33 @@ function ResumePreviewPanel({
         ) : (
           <div className="text-[12.5px] leading-relaxed">
             {lines.map((line, i) => {
-              if (line.type === "spacer") return <div key={i} className="h-1" />;
+              const flashStyle = flashing
+                ? { animationDelay: `${i * 28}ms`, animationFillMode: "both" as const }
+                : {};
+              const flashClass = flashing ? "line-flash" : "";
+
+              if (line.type === "spacer") return <div key={`${flashKey}-${i}`} className="h-1" />;
 
               if (line.type === "name") return (
-                <h1 key={i} className="text-[22px] font-bold text-foreground tracking-tight leading-tight mb-1 text-center">
+                <h1 key={`${flashKey}-${i}`} className={`text-[22px] font-bold text-foreground tracking-tight leading-tight mb-1 text-center ${flashClass}`} style={flashStyle}>
                   {line.content}
                 </h1>
               );
 
               if (line.type === "title") return (
-                <p key={i} className="text-[12px] font-semibold text-primary/80 mb-0.5 text-center">
+                <p key={`${flashKey}-${i}`} className={`text-[12px] font-semibold text-primary/80 mb-0.5 text-center ${flashClass}`} style={flashStyle}>
                   {line.content}
                 </p>
               );
 
               if (line.type === "contact") return (
-                <p key={i} className="text-[11px] text-muted-foreground leading-snug text-center">
+                <p key={`${flashKey}-${i}`} className={`text-[11px] text-muted-foreground leading-snug text-center ${flashClass}`} style={flashStyle}>
                   {line.content}
                 </p>
               );
 
               if (line.type === "section") return (
-                <div key={i} className="mt-4 mb-1.5 border-b border-primary/30 pb-0.5">
+                <div key={`${flashKey}-${i}`} className={`mt-4 mb-1.5 border-b border-primary/30 pb-0.5 ${flashClass}`} style={flashStyle}>
                   <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-primary">
                     {line.content}
                   </p>
@@ -887,26 +906,26 @@ function ResumePreviewPanel({
               );
 
               if (line.type === "role") return (
-                <p key={i} className="font-semibold text-[12.5px] text-foreground mt-2 mb-0">
+                <p key={`${flashKey}-${i}`} className={`font-semibold text-[12.5px] text-foreground mt-2 mb-0 ${flashClass}`} style={flashStyle}>
                   {line.content}
                 </p>
               );
 
               if (line.type === "role-meta") return (
-                <p key={i} className="text-[11px] italic text-muted-foreground mb-1">
+                <p key={`${flashKey}-${i}`} className={`text-[11px] italic text-muted-foreground mb-1 ${flashClass}`} style={flashStyle}>
                   {line.content}
                 </p>
               );
 
               if (line.type === "bullet") return (
-                <div key={i} className="flex gap-1.5 items-start ml-1 mt-0.5">
+                <div key={`${flashKey}-${i}`} className={`flex gap-1.5 items-start ml-1 mt-0.5 ${flashClass}`} style={flashStyle}>
                   <span className="text-primary/50 flex-shrink-0 mt-[3px] text-[9px]">▸</span>
                   <p className="text-foreground/80 leading-snug">{line.content}</p>
                 </div>
               );
 
               return (
-                <p key={i} className="text-foreground/75 leading-snug mt-0.5">
+                <p key={`${flashKey}-${i}`} className={`text-foreground/75 leading-snug mt-0.5 ${flashClass}`} style={flashStyle}>
                   {line.content}
                 </p>
               );
