@@ -89,12 +89,30 @@ function cleanSkillsList(commaSeparated: string): string {
 }
 
 function cleanResumeSkillsSection(resumeText: string): string {
-  return resumeText.split("\n").map(line => {
-    const commaCount = (line.match(/,/g) || []).length;
-    if (commaCount >= 4 && line.length > 40) {
-      const cleaned = cleanSkillsList(line);
-      return cleaned.length > 0 ? cleaned : line;
+  const lines = resumeText.split("\n");
+  let inSkillsSection = false;
+
+  return lines.map(line => {
+    const upper = line.trim().toUpperCase();
+
+    if (/^(TECHNICAL SKILLS|SKILLS|CORE SKILLS|KEY SKILLS|TECHNICAL COMPETENCIES|COMPETENCIES)/.test(upper)) {
+      inSkillsSection = true;
+      return line;
     }
+
+    if (/^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT|EDUCATION|PROJECTS|CERTIFICATIONS|SUMMARY|PROFESSIONAL SUMMARY|OBJECTIVE|VOLUNTEER|AWARDS|PUBLICATIONS|REFERENCES)/.test(upper)) {
+      inSkillsSection = false;
+      return line;
+    }
+
+    if (inSkillsSection) {
+      const commaCount = (line.match(/,/g) || []).length;
+      if (commaCount >= 3 && line.trim().length > 20) {
+        const cleaned = cleanSkillsList(line);
+        return cleaned.length > 0 ? cleaned : line;
+      }
+    }
+
     return line;
   }).join("\n");
 }
