@@ -105,9 +105,23 @@ function cleanResumeSkillsSection(resumeText: string): string {
       return line;
     }
 
-    if (inSkillsSection) {
+    if (inSkillsSection && line.trim().length > 0) {
+      // Handle "Category Label: skill1, skill2, skill3" format
+      const colonIdx = line.indexOf(":");
+      if (colonIdx !== -1) {
+        const label = line.substring(0, colonIdx).trim();
+        const skillsPart = line.substring(colonIdx + 1).trim();
+        // Only clean if the part after the colon has commas (it's a skill list)
+        if ((skillsPart.match(/,/g) || []).length >= 1) {
+          const cleaned = cleanSkillsList(skillsPart);
+          return cleaned.length > 0 ? `${label}: ${cleaned}` : line;
+        }
+        return line;
+      }
+
+      // Handle plain comma-separated lines (no category label)
       const commaCount = (line.match(/,/g) || []).length;
-      if (commaCount >= 3 && line.trim().length > 20) {
+      if (commaCount >= 3) {
         const cleaned = cleanSkillsList(line);
         return cleaned.length > 0 ? cleaned : line;
       }
@@ -418,7 +432,7 @@ ${suggestionsContext}
 Return ONLY a JSON object with this exact structure (no markdown, no backticks):
 {
   "improvedSummary": "rewritten professional summary (2-4 sentences, strong action-oriented, includes relevant keywords naturally)",
-  "improvedSkills": "improved comma-separated skills list — concrete technologies, tools, frameworks, languages, and methodologies only (e.g. 'Python, Docker, CI/CD, PostgreSQL, AWS')",
+  "improvedSkills": "flat comma-separated skills list — concrete technologies only, for display as chips (e.g. 'C#, Docker, CI/CD, PostgreSQL, AWS')",
   "experienceImprovements": [
     {
       "index": 0,
@@ -438,7 +452,13 @@ Rules:
 - Include improvements for ALL experience entries found in the resume
 - improvedResumeText must be the complete resume text with all improvements incorporated
 - CRITICAL for improvedResumeText: preserve every specific technology name, framework, and tool from the original resume exactly as written — never replace specific terms (e.g. "ASP.NET Core Web API", ".NET Core", "Azure DevOps") with generic alternatives. You may ADD keywords but never remove or genericise existing ones.
-- In improvedResumeText, the Technical Skills line must include ALL skills from the original, plus ONLY missing JD keywords that the candidate can truthfully claim — do NOT add keywords just because they appear in the JD if they are not evidenced by the resume's actual experience`;
+- CRITICAL for improvedResumeText Technical Skills section: rewrite it using clean category groupings. Use this exact format (each category on its own line, no extra text):
+  Languages & Frameworks: C#, .NET Core, ASP.NET Core Web API
+  API & Architecture: REST API Design, Microservices, ...
+  Cloud & DevOps: Azure DevOps, CI/CD, Docker, ...
+  Databases & Caching: PostgreSQL, SQL Server, Redis
+  Tools & Practices: Git, Agile (Scrum, Kanban), ...
+  Adapt the categories to fit the candidate's actual skills. Only include concrete tools/technologies — no soft skills, no vague words`;
 
   req.log.info("Starting AI resume fix");
 

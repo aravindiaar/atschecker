@@ -589,6 +589,7 @@ type ResumeLine =
   | { type: "role-meta"; content: string }
   | { type: "bullet"; content: string }
   | { type: "spacer" }
+  | { type: "skill-category"; label: string; skills: string[] }
   | { type: "body"; content: string };
 
 function looksLikeContact(line: string): boolean {
@@ -637,12 +638,16 @@ function lastMeaningfulType(lines: ResumeLine[]): ResumeLine["type"] | null {
   return null;
 }
 
+const SKILLS_SECTION_RE = /^(TECHNICAL SKILLS|SKILLS|CORE SKILLS|KEY SKILLS|TECHNICAL COMPETENCIES|COMPETENCIES)$/;
+const OTHER_SECTION_RE = /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT|EDUCATION|PROJECTS|CERTIFICATIONS|SUMMARY|PROFESSIONAL SUMMARY|OBJECTIVE|VOLUNTEER|AWARDS|PUBLICATIONS|REFERENCES)$/;
+
 function parseResumeText(text: string): ResumeLine[] {
   const rawLines = text.split("\n");
   const result: ResumeLine[] = [];
   let phase: "header" | "body" = "header";
   let nameSet = false;
   let headerLinesSinceTitle = 0;
+  let inSkillsSection = false;
 
   for (const raw of rawLines) {
     const t = raw.trim();
@@ -693,8 +698,24 @@ function parseResumeText(text: string): ResumeLine[] {
 
     // ── Body phase ─────────────────────────────────────────────
     if (isSectionHeader(t)) {
+      inSkillsSection = SKILLS_SECTION_RE.test(t.toUpperCase());
       result.push({ type: "section", content: t });
       continue;
+    }
+
+    // Detect "Category Label: skill1, skill2, skill3" lines inside skills section
+    if (inSkillsSection) {
+      const colonIdx = t.indexOf(":");
+      if (colonIdx > 0 && colonIdx < 40) {
+        const label = t.substring(0, colonIdx).trim();
+        const skillsPart = t.substring(colonIdx + 1).trim();
+        // It's a skill-category line if the label has no bullet/digit prefix and skills part has content
+        if (skillsPart.length > 0 && /^[A-Za-z]/.test(label) && !/^[•\-*\d]/.test(label)) {
+          const skills = skillsPart.split(",").map(s => s.trim()).filter(Boolean);
+          result.push({ type: "skill-category", label, skills });
+          continue;
+        }
+      }
     }
 
     if (isBulletLine(t)) {
@@ -706,7 +727,7 @@ function parseResumeText(text: string): ResumeLine[] {
     // role entry (common in DOCX) do not break role / role-meta detection.
     const prev = lastMeaningfulType(result);
 
-    if (prev === "section") {
+    if (prev === "section" || prev === "skill-category") {
       result.push({ type: "role", content: t });
       continue;
     }
@@ -778,6 +799,16 @@ async function generateDocx(lines: ResumeLine[], outputName: string): Promise<vo
       children.push(new Paragraph({
         spacing: { before: 0, after: 80 },
         children: [new TextRun({ text: line.content, size: 19, italics: true, font: "Calibri", color: "555555" })],
+      }));
+      continue;
+    }
+    if (line.type === "skill-category") {
+      children.push(new Paragraph({
+        spacing: { before: 60, after: 40 },
+        children: [
+          new TextRun({ text: `${line.label}: `, bold: true, size: 20, font: "Calibri", color: "1A1A1A" }),
+          new TextRun({ text: line.skills.join(", "), size: 20, font: "Calibri", color: "333333" }),
+        ],
       }));
       continue;
     }
@@ -949,6 +980,19 @@ function ResumePreviewPanel({
                 <p key={`${flashKey}-${i}`} className={`text-[11px] italic text-muted-foreground mb-1 ${flashClass}`} style={flashStyle}>
                   {line.content}
                 </p>
+              );
+
+              if (line.type === "skill-category") return (
+                <div key={`${flashKey}-${i}`} className={`flex flex-wrap items-baseline gap-x-1.5 gap-y-1 mt-1 ${flashClass}`} style={flashStyle}>
+                  <span className="text-[11.5px] font-semibold text-foreground/90 shrink-0">{line.label}:</span>
+                  <span className="flex flex-wrap gap-1">
+                    {line.skills.map((sk, si) => (
+                      <span key={si} className="inline-block bg-primary/8 text-foreground/80 border border-primary/15 rounded px-1.5 py-px text-[10.5px] leading-tight">
+                        {sk}
+                      </span>
+                    ))}
+                  </span>
+                </div>
               );
 
               if (line.type === "bullet") return (
