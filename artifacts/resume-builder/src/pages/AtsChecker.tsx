@@ -533,7 +533,12 @@ function FixSection({ label, after, sectionKey, applied, onApply, showBefore = t
   onApply: () => void;
   showBefore?: boolean;
 }) {
-  void before; void originalText; void sectionKey;
+  void before; void originalText;
+  const isSkills = sectionKey === "skills";
+  const skillChips = isSkills
+    ? after.split(",").map(s => s.trim()).filter(s => s.length > 0 && s.length < 60 && !/[.]{2,}/.test(s))
+    : [];
+
   return (
     <div className={`rounded-lg border p-3 ${applied ? "border-green-400/50 bg-green-50/30 dark:bg-green-900/10" : "border-border"}`}>
       <div className="flex items-center justify-between mb-2 gap-2">
@@ -544,9 +549,17 @@ function FixSection({ label, after, sectionKey, applied, onApply, showBefore = t
         </Button>
       </div>
       <div className={showBefore ? "grid grid-cols-2 gap-2 text-xs" : ""}>
-        <div className="bg-primary/5 border border-primary/20 rounded p-2.5 text-xs leading-relaxed whitespace-pre-wrap text-foreground">
-          {after}
-        </div>
+        {isSkills ? (
+          <div className="bg-primary/5 border border-primary/20 rounded p-2.5 flex flex-wrap gap-1.5">
+            {skillChips.map((chip, i) => (
+              <Badge key={i} variant="secondary" className="text-[11px] font-normal">{chip}</Badge>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-primary/5 border border-primary/20 rounded p-2.5 text-xs leading-relaxed whitespace-pre-wrap text-foreground">
+            {after}
+          </div>
+        )}
       </div>
     </div>
   );

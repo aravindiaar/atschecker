@@ -320,7 +320,7 @@ ${suggestionsContext}
 Return ONLY a JSON object with this exact structure (no markdown, no backticks):
 {
   "improvedSummary": "rewritten professional summary (2-4 sentences, strong action-oriented, includes relevant keywords naturally)",
-  "improvedSkills": "improved comma-separated skills list incorporating missing relevant keywords",
+  "improvedSkills": "improved comma-separated skills list — concrete technologies, tools, frameworks, languages, and methodologies only (e.g. 'Python, Docker, CI/CD, PostgreSQL, AWS')",
   "experienceImprovements": [
     {
       "index": 0,
@@ -336,6 +336,7 @@ Rules:
 - Make bullet points start with strong action verbs and include measurable results where possible
 - Keep the tone professional and concise
 - Naturally incorporate relevant missing keywords without keyword stuffing
+- CRITICAL for improvedSkills: only include concrete, recognisable skills — specific languages, frameworks, tools, platforms, or named methodologies. Never include vague words, adjectives, soft-skill phrases, sentence fragments, or words ending in punctuation (e.g. never "mindset", "breathe", "depth", "modern", "hands-on", "pipelines.", "infrastructure-as-code.", "collaborative", "expertise")
 - Include improvements for ALL experience entries found in the resume
 - improvedResumeText must be the complete resume text with all improvements incorporated
 - CRITICAL for improvedResumeText: preserve every specific technology name, framework, and tool from the original resume exactly as written — never replace specific terms (e.g. "ASP.NET Core Web API", ".NET Core", "Azure DevOps") with generic alternatives. You may ADD keywords but never remove or genericise existing ones.
