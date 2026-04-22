@@ -12,11 +12,21 @@ import {
   CheckCircle, XCircle, AlertCircle, Sparkles, Loader2,
   Upload, FileText, Wand2, ArrowRight, Check, RotateCcw,
   TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Download,
+  Brain, ThumbsUp, AlertTriangle, Lightbulb,
 } from "lucide-react";
 import {
   Document, Packer, Paragraph, TextRun, AlignmentType,
   BorderStyle,
 } from "docx";
+
+type AiFeedback = {
+  fitScore: number;
+  fitLevel: "Excellent" | "Good" | "Fair" | "Poor";
+  summary: string;
+  strengths: string[];
+  gaps: string[];
+  recommendations: string[];
+};
 
 export default function AtsChecker() {
   const { resume } = useResume();
@@ -35,6 +45,10 @@ export default function AtsChecker() {
   const [fixResult, setFixResult] = useState<ResumeFixResult | null>(null);
   const [reAnalysis, setReAnalysis] = useState<AtsCheckResult | null>(null);
   const [appliedSections, setAppliedSections] = useState<Set<string>>(new Set());
+
+  const [aiFeedback, setAiFeedback] = useState<AiFeedback | null>(null);
+  const [aiFeedbackLoading, setAiFeedbackLoading] = useState(false);
+  const [aiFeedbackError, setAiFeedbackError] = useState<string | null>(null);
 
   const [showFixDetails, setShowFixDetails] = useState(true);
 
@@ -109,6 +123,29 @@ ${resume.education}`.trim();
     setAppliedSections(new Set());
   };
 
+  const runAiFeedback = useCallback(async (text: string, jd?: string) => {
+    setAiFeedback(null);
+    setAiFeedbackLoading(true);
+    setAiFeedbackError(null);
+    try {
+      const res = await fetch("/api/resume/ai-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeText: text, ...(jd && jd.trim().length > 10 ? { jobDescription: jd } : {}) }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? "AI feedback failed");
+      }
+      const data = await res.json() as AiFeedback;
+      setAiFeedback(data);
+    } catch (e) {
+      setAiFeedbackError(e instanceof Error ? e.message : "AI feedback failed");
+    } finally {
+      setAiFeedbackLoading(false);
+    }
+  }, []);
+
   const runAnalysis = (text: string) => {
     atsCheck.mutate(
       { data: { resumeText: text, ...(jobDescription.trim().length > 10 ? { jobDescription } : {}) } },
@@ -122,7 +159,10 @@ ${resume.education}`.trim();
     setFixResult(null);
     setReAnalysis(null);
     setAppliedSections(new Set());
+    setAiFeedback(null);
+    setAiFeedbackError(null);
     runAnalysis(activeResume);
+    void runAiFeedback(activeResume, jobDescription);
   };
 
   const onFix = () => {
@@ -278,6 +318,10 @@ ${resume.education}`.trim();
           </Button>
 
           {analysis && <AtsResults result={analysis} isTargeted={jobDescription.trim().length > 10} />}
+
+          {(aiFeedbackLoading || aiFeedback || aiFeedbackError) && (
+            <AiFeedbackPanel loading={aiFeedbackLoading} feedback={aiFeedback} error={aiFeedbackError} />
+          )}
         </div>
       </StepCard>
 
@@ -1012,6 +1056,114 @@ function ResumePreviewPanel({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function AiFeedbackPanel({
+  loading,
+  feedback,
+  error,
+}: {
+  loading: boolean;
+  feedback: AiFeedback | null;
+  error: string | null;
+}) {
+  const fitColors: Record<string, string> = {
+    Excellent: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800/40",
+    Good: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/40",
+    Fair: "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800/40",
+    Poor: "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/40",
+  };
+
+  return (
+    <div className="rounded-xl border border-primary/20 bg-primary/3 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-primary/15 bg-primary/5">
+        <Brain className="h-4 w-4 text-primary" />
+        <span className="text-sm font-semibold text-primary">AI Recruiter Feedback</span>
+        {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary ml-auto" />}
+        {feedback && (
+          <Badge className={`ml-auto text-xs font-semibold border ${fitColors[feedback.fitLevel]}`} variant="outline">
+            {feedback.fitLevel} · {feedback.fitScore}/100
+          </Badge>
+        )}
+      </div>
+
+      <div className="p-4 space-y-4">
+        {loading && (
+          <div className="space-y-3 animate-pulse">
+            <div className="h-3.5 bg-muted rounded w-full" />
+            <div className="h-3.5 bg-muted rounded w-5/6" />
+            <div className="h-3.5 bg-muted rounded w-4/6" />
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="space-y-2">
+                  <div className="h-3 bg-muted rounded w-1/2" />
+                  <div className="h-3 bg-muted rounded w-full" />
+                  <div className="h-3 bg-muted rounded w-5/6" />
+                  <div className="h-3 bg-muted rounded w-4/6" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <p className="text-sm text-red-600 flex items-center gap-1.5">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />{error}
+          </p>
+        )}
+
+        {feedback && (
+          <>
+            <p className="text-sm text-foreground/80 leading-relaxed">{feedback.summary}</p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide">
+                  <ThumbsUp className="h-3.5 w-3.5" />Strengths
+                </div>
+                <ul className="space-y-1.5">
+                  {feedback.strengths.map((s, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-foreground/75">
+                      <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400 flex-shrink-0 mt-px" />
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wide">
+                  <AlertTriangle className="h-3.5 w-3.5" />Gaps
+                </div>
+                <ul className="space-y-1.5">
+                  {feedback.gaps.map((g, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-foreground/75">
+                      <XCircle className="h-3.5 w-3.5 text-red-500 dark:text-red-400 flex-shrink-0 mt-px" />
+                      {g}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">
+                  <Lightbulb className="h-3.5 w-3.5" />Recommendations
+                </div>
+                <ul className="space-y-1.5">
+                  {feedback.recommendations.map((r, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-foreground/75">
+                      <ArrowRight className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0 mt-px" />
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

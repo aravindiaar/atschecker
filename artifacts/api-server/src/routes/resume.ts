@@ -571,4 +571,62 @@ router.get("/resume/templates", async (_req, res): Promise<void> => {
   res.json(result);
 });
 
+router.post("/resume/ai-feedback", async (req, res): Promise<void> => {
+  const { resumeText, jobDescription } = req.body as { resumeText?: string; jobDescription?: string };
+
+  if (!resumeText || resumeText.trim().length < 50) {
+    res.status(400).json({ error: "Resume text is required." });
+    return;
+  }
+
+  const hasJD = !!jobDescription && jobDescription.trim().length > 10;
+
+  const prompt = `You are a senior technical recruiter and resume expert. Analyse the following resume${hasJD ? " against the provided job description" : ""} and give honest, specific feedback.
+
+RESUME:
+${resumeText.substring(0, 3500)}
+${hasJD ? `\nJOB DESCRIPTION:\n${jobDescription!.substring(0, 1500)}` : ""}
+
+Return ONLY a JSON object with no markdown or backticks:
+{
+  "fitScore": <integer 0-100 representing how well this resume matches the ${hasJD ? "job description" : "typical tech industry expectations"}>,
+  "fitLevel": "<one of: Excellent | Good | Fair | Poor>",
+  "summary": "<2-3 sentence overall assessment — be direct and specific, reference actual content from the resume>",
+  "strengths": ["<specific strength 1>", "<specific strength 2>", "<specific strength 3>"],
+  "gaps": ["<specific gap or weakness 1>", "<specific gap 2>", "<specific gap 3>"],
+  "recommendations": ["<actionable recommendation 1>", "<actionable recommendation 2>", "<actionable recommendation 3>"]
+}
+
+Rules:
+- fitScore must be consistent with fitLevel (Excellent=80-100, Good=60-79, Fair=40-59, Poor=0-39)
+- strengths, gaps, and recommendations must each have 3-5 items
+- Be specific — reference real technologies, roles, or sections from the resume
+- Recommendations must be concrete and actionable, not generic advice`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "";
+    let parsed: unknown;
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(raw);
+    } catch {
+      req.log.error({ raw }, "Failed to parse AI feedback JSON");
+      res.status(500).json({ error: "Failed to parse AI response." });
+      return;
+    }
+
+    req.log.info("AI feedback complete");
+    res.json(parsed);
+  } catch (err) {
+    req.log.error({ err }, "AI feedback failed");
+    res.status(500).json({ error: "AI feedback request failed." });
+  }
+});
+
 export default router;
