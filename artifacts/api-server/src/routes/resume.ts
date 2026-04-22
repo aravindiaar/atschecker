@@ -216,13 +216,14 @@ router.post("/resume/ats-check", async (req, res): Promise<void> => {
   let uniqueMissing: string[];
 
   if (hasJD) {
-    // Targeted JD-match mode
-    const jobKeywords = extractKeyPhrases(jobDescription!);
+    // Targeted JD-match mode — only score against meaningful technical keywords
+    const rawJobKeywords = [...extractKeyPhrases(jobDescription!)];
+    const jobKeywords = filterTechnicalKeywords(rawJobKeywords);
     const matched: string[] = [];
     const missing: string[] = [];
 
     for (const keyword of jobKeywords) {
-      if (keyword.length < 3) continue;
+      if (keyword.length < 2) continue;
       if (resumeText.toLowerCase().includes(keyword.toLowerCase())) {
         matched.push(keyword);
       } else {
@@ -238,9 +239,7 @@ router.post("/resume/ats-check", async (req, res): Promise<void> => {
 
     // Sliced/filtered lists are for display only
     uniqueMatched = [...new Set(matched)].slice(0, 30);
-    uniqueMissing = [...new Set(missing)]
-      .filter((k) => !STOP_WORDS.has(k) && k.length > 2)
-      .slice(0, 20);
+    uniqueMissing = [...new Set(missing)].slice(0, 20);
 
     if (uniqueMissing.length > 0) {
       suggestions.push(`Add these missing keywords to your resume: ${uniqueMissing.slice(0, 5).join(", ")}`);

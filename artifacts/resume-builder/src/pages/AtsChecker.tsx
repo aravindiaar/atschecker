@@ -153,6 +153,15 @@ ${resume.education}`.trim();
     );
   };
 
+  const onRefix = () => {
+    if (!fixResult || !reAnalysis) return;
+    saveResume(fixResult.improvedResumeText, filename ?? "improved_resume");
+    setAnalysis(reAnalysis);
+    setFixResult(null);
+    setReAnalysis(null);
+    setAppliedSections(new Set());
+  };
+
   const previewText = fixResult ? fixResult.improvedResumeText : (resumeText ?? null);
   const previewIsImproved = !!fixResult;
 
@@ -375,6 +384,12 @@ ${resume.education}`.trim();
                   <p className={`text-4xl font-bold ${scoreColor(reAnalysis.overallScore)}`}>{reAnalysis.overallScore}</p>
                   <ScoreDelta before={analysis.overallScore} after={reAnalysis.overallScore} className="justify-center mt-1" />
                 </div>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={onRefix} className="text-xs gap-1.5">
+                  <Wand2 className="h-3.5 w-3.5" />
+                  Re-Fix with AI
+                </Button>
               </div>
               {(reAnalysis.overallScore - analysis.overallScore) < 10 && reAnalysis.keywordScore < 35 && (
                 <div className="flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/60 dark:border-blue-800/40 dark:bg-blue-900/10 p-3 text-sm text-blue-800 dark:text-blue-300">
