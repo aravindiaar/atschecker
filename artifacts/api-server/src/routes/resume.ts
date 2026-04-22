@@ -33,6 +33,40 @@ function tokenize(text: string): string[] {
     .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
 }
 
+const TECH_INDICATORS = new Set([
+  "python", "java", "javascript", "js", "typescript", "ts", "golang", "go", "rust",
+  "swift", "kotlin", "ruby", "php", "scala", "perl", "bash", "powershell", "c#",
+  "react", "angular", "vue", "nextjs", "nuxt", "svelte", "django", "flask", "fastapi",
+  "spring", "express", "rails", "laravel", "dotnet", "net",
+  "docker", "kubernetes", "k8s", "terraform", "ansible", "jenkins", "git", "github",
+  "gitlab", "bitbucket", "circleci",
+  "aws", "azure", "gcp", "cloud", "serverless", "lambda",
+  "postgresql", "postgres", "mysql", "mongodb", "redis", "elasticsearch", "sqlite",
+  "cassandra", "dynamodb", "firestore", "kafka", "rabbitmq",
+  "graphql", "grpc", "rest", "soap", "websocket", "http", "https", "tls", "ssl",
+  "api", "sdk", "cli", "orm", "cdn", "dns",
+  "html", "css", "sass", "scss", "webpack", "vite", "babel", "npm", "pnpm", "yarn",
+  "jwt", "oauth", "saml", "sso", "rbac",
+  "microservices", "devops", "agile", "scrum", "kanban",
+  "linux", "unix", "macos", "windows",
+  "etl", "sql", "nosql", "mvc", "mvvm", "oop", "ddd", "tdd",
+  "jira", "confluence", "figma", "prometheus", "grafana", "nginx", "apache",
+]);
+
+function filterTechnicalKeywords(keywords: string[]): string[] {
+  return keywords.filter(kw => {
+    const trimmed = kw.trim();
+    const lower = trimmed.toLowerCase();
+    if (/[.,;:!?]$/.test(lower)) return false;
+    if (lower.length < 2) return false;
+    if (trimmed.includes(" ")) return true;
+    if (/[#/+]/.test(lower)) return true;
+    if (/\d/.test(lower)) return true;
+    if (TECH_INDICATORS.has(lower)) return true;
+    return false;
+  });
+}
+
 function extractKeyPhrases(text: string): Set<string> {
   const words = tokenize(text);
   const phrases = new Set<string>();
@@ -301,8 +335,9 @@ router.post("/resume/fix", async (req, res): Promise<void> => {
     ? `\nThe resume is being tailored for this job description:\n${jobDescription.substring(0, 1500)}`
     : "";
 
-  const keywordsContext = missingKeywords && missingKeywords.length > 0
-    ? `\nKeywords to incorporate if truthfully applicable: ${missingKeywords.slice(0, 15).join(", ")}`
+  const filteredKeywords = missingKeywords ? filterTechnicalKeywords(missingKeywords).slice(0, 15) : [];
+  const keywordsContext = filteredKeywords.length > 0
+    ? `\nMissing technical keywords from the JD (only add ones the candidate can truthfully claim based on their existing resume experience): ${filteredKeywords.join(", ")}`
     : "";
 
   const suggestionsContext = suggestions && suggestions.length > 0
@@ -340,7 +375,7 @@ Rules:
 - Include improvements for ALL experience entries found in the resume
 - improvedResumeText must be the complete resume text with all improvements incorporated
 - CRITICAL for improvedResumeText: preserve every specific technology name, framework, and tool from the original resume exactly as written — never replace specific terms (e.g. "ASP.NET Core Web API", ".NET Core", "Azure DevOps") with generic alternatives. You may ADD keywords but never remove or genericise existing ones.
-- In improvedResumeText, the Technical Skills line must include ALL skills from the original, plus any missing JD keywords that are truthfully applicable`;
+- In improvedResumeText, the Technical Skills line must include ALL skills from the original, plus ONLY missing JD keywords that the candidate can truthfully claim — do NOT add keywords just because they appear in the JD if they are not evidenced by the resume's actual experience`;
 
   req.log.info("Starting AI resume fix");
 
