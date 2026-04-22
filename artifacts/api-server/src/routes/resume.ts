@@ -65,30 +65,48 @@ const NOISE_SKILLS = new Set([
   "engineering", "technical", "professional", "live", "overview",
 ]);
 
-function isValidSkillEntry(skill: string): boolean {
+function isValidSkillEntry(skill: string, strictTechOnly = false): boolean {
   const trimmed = skill.trim();
   const lower = trimmed.toLowerCase();
   if (!trimmed || trimmed.length < 2) return false;
   if (/[.,;:!?]$/.test(lower)) return false;
   const words = lower.split(/\s+/);
-  if (words.length > 5) return false;
-  if (words.some(w => NOISE_SKILLS.has(w))) return false;
+  if (words.length > 7) return false;
+  // Always block pure noise words regardless of mode
+  if (words.every(w => NOISE_SKILLS.has(w))) return false;
   if (words.length === 1) {
-    return TECH_INDICATORS.has(lower) || /[#/+\d]/.test(lower);
+    // Single words must be known tech terms when in strict mode
+    if (strictTechOnly) return TECH_INDICATORS.has(lower) || /[#/+\d]/.test(lower);
+    // In permissive mode, allow any single word not in NOISE_SKILLS (for non-tech resumes)
+    return !NOISE_SKILLS.has(lower);
   }
-  return words.some(w => TECH_INDICATORS.has(w) || /[#/+\d]/.test(w));
+  // Multi-word phrases: keep unless majority of words are noise
+  const noiseCount = words.filter(w => NOISE_SKILLS.has(w)).length;
+  if (noiseCount >= Math.ceil(words.length / 2)) return false;
+  return true;
 }
 
-function cleanSkillsList(commaSeparated: string): string {
+function isTechnicalResume(resumeText: string): boolean {
+  const lower = resumeText.toLowerCase();
+  let hits = 0;
+  for (const term of TECH_INDICATORS) {
+    if (lower.includes(term)) hits++;
+    if (hits >= 3) return true;
+  }
+  return false;
+}
+
+function cleanSkillsList(commaSeparated: string, strictTechOnly = false): string {
   const cleaned = commaSeparated
     .split(",")
-    .filter(s => isValidSkillEntry(s))
+    .filter(s => isValidSkillEntry(s, strictTechOnly))
     .map(s => s.trim())
     .join(", ");
   return cleaned;
 }
 
 function cleanResumeSkillsSection(resumeText: string): string {
+  const strictTechOnly = isTechnicalResume(resumeText);
   const lines = resumeText.split("\n");
   let inSkillsSection = false;
 
@@ -111,18 +129,17 @@ function cleanResumeSkillsSection(resumeText: string): string {
       if (colonIdx !== -1) {
         const label = line.substring(0, colonIdx).trim();
         const skillsPart = line.substring(colonIdx + 1).trim();
-        // Only clean if the part after the colon has commas (it's a skill list)
         if ((skillsPart.match(/,/g) || []).length >= 1) {
-          const cleaned = cleanSkillsList(skillsPart);
+          const cleaned = cleanSkillsList(skillsPart, strictTechOnly);
           return cleaned.length > 0 ? `${label}: ${cleaned}` : line;
         }
         return line;
       }
 
-      // Handle plain comma-separated lines (no category label)
+      // Handle plain comma-separated or bullet-per-line lists
       const commaCount = (line.match(/,/g) || []).length;
-      if (commaCount >= 3) {
-        const cleaned = cleanSkillsList(line);
+      if (commaCount >= 2) {
+        const cleaned = cleanSkillsList(line, strictTechOnly);
         return cleaned.length > 0 ? cleaned : line;
       }
     }
@@ -294,9 +311,17 @@ router.post("/resume/ats-check", async (req, res): Promise<void> => {
   let uniqueMissing: string[];
 
   if (hasJD) {
-    // Targeted JD-match mode — only score against meaningful technical keywords
+    // Targeted JD-match mode
     const rawJobKeywords = [...extractKeyPhrases(jobDescription!)];
-    const jobKeywords = filterTechnicalKeywords(rawJobKeywords);
+    let jobKeywords = filterTechnicalKeywords(rawJobKeywords);
+
+    // If fewer than 3 tech keywords found, this is a non-technical JD.
+    // Fall back to broad tokenized matching so any role can be scored accurately.
+    const isNonTechnicalJD = jobKeywords.length < 3;
+    if (isNonTechnicalJD) {
+      jobKeywords = tokenize(jobDescription!).filter(w => w.length > 3);
+    }
+
     const matched: string[] = [];
     const missing: string[] = [];
 
@@ -412,9 +437,12 @@ router.post("/resume/fix", async (req, res): Promise<void> => {
     ? `\nThe resume is being tailored for this job description:\n${jobDescription.substring(0, 1500)}`
     : "";
 
-  const filteredKeywords = missingKeywords ? filterTechnicalKeywords(missingKeywords).slice(0, 15) : [];
+  const isTechResume = isTechnicalResume(resumeText);
+  const filteredKeywords = missingKeywords
+    ? (isTechResume ? filterTechnicalKeywords(missingKeywords) : missingKeywords).slice(0, 15)
+    : [];
   const keywordsContext = filteredKeywords.length > 0
-    ? `\nMissing technical keywords from the JD (only add ones the candidate can truthfully claim based on their existing resume experience): ${filteredKeywords.join(", ")}`
+    ? `\nMissing keywords from the JD (only add ones the candidate can truthfully claim based on their existing resume experience): ${filteredKeywords.join(", ")}`
     : "";
 
   const suggestionsContext = suggestions && suggestions.length > 0
@@ -452,13 +480,10 @@ Rules:
 - Include improvements for ALL experience entries found in the resume
 - improvedResumeText must be the complete resume text with all improvements incorporated
 - CRITICAL for improvedResumeText: preserve every specific technology name, framework, and tool from the original resume exactly as written — never replace specific terms (e.g. "ASP.NET Core Web API", ".NET Core", "Azure DevOps") with generic alternatives. You may ADD keywords but never remove or genericise existing ones.
-- CRITICAL for improvedResumeText Technical Skills section: rewrite it using clean category groupings. Use this exact format (each category on its own line, no extra text):
-  Languages & Frameworks: C#, .NET Core, ASP.NET Core Web API
-  API & Architecture: REST API Design, Microservices, ...
-  Cloud & DevOps: Azure DevOps, CI/CD, Docker, ...
-  Databases & Caching: PostgreSQL, SQL Server, Redis
-  Tools & Practices: Git, Agile (Scrum, Kanban), ...
-  Adapt the categories to fit the candidate's actual skills. Only include concrete tools/technologies — no soft skills, no vague words`;
+- CRITICAL for the Skills/Key Skills section in improvedResumeText: ${isTechResume
+  ? `rewrite it using clean category groupings relevant to the candidate's tech stack. Each category on its own line, format: "Category Name: Skill1, Skill2, Skill3". Adapt category names to fit the actual skills (e.g. Languages & Frameworks, Cloud & DevOps, Databases & Caching, Tools & Practices). Only include concrete technologies — no soft skills or vague words.`
+  : `rewrite it as clean category groupings that match the nature of the role. Each category on its own line, format "Category Name: Skill1, Skill2, Skill3". Use categories that make sense for the job (e.g. Physical & Outdoor Skills, Customer Service, Licences & Certifications, Availability & Reliability). Keep skills specific and honest — no generic fluff.`
+}`;
 
   req.log.info("Starting AI resume fix");
 
