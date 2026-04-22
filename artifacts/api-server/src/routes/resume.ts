@@ -53,6 +53,52 @@ const TECH_INDICATORS = new Set([
   "jira", "confluence", "figma", "prometheus", "grafana", "nginx", "apache",
 ]);
 
+const NOISE_SKILLS = new Set([
+  "collaborative", "leadership", "proactive", "mentoring", "participating",
+  "architectural", "pragmatic", "creation", "delivery", "proficiency",
+  "familiarity", "commitment", "mindset", "breathe", "expertise",
+  "proven", "modern", "depth", "implementing", "building", "refining",
+  "decisions", "approach", "practices", "tooling", "continuously",
+  "improve", "learn", "managing", "ability", "passion", "focus",
+  "strong", "solid", "excellent", "outstanding", "automation", "modular",
+  "scalable", "code", "pragmatic", "personal", "continuous", "hands-on",
+  "engineering", "technical", "professional", "live", "overview",
+]);
+
+function isValidSkillEntry(skill: string): boolean {
+  const trimmed = skill.trim();
+  const lower = trimmed.toLowerCase();
+  if (!trimmed || trimmed.length < 2) return false;
+  if (/[.,;:!?]$/.test(lower)) return false;
+  const words = lower.split(/\s+/);
+  if (words.length > 5) return false;
+  if (words.some(w => NOISE_SKILLS.has(w))) return false;
+  if (words.length === 1) {
+    return TECH_INDICATORS.has(lower) || /[#/+\d]/.test(lower);
+  }
+  return words.some(w => TECH_INDICATORS.has(w) || /[#/+\d]/.test(w));
+}
+
+function cleanSkillsList(commaSeparated: string): string {
+  const cleaned = commaSeparated
+    .split(",")
+    .filter(s => isValidSkillEntry(s))
+    .map(s => s.trim())
+    .join(", ");
+  return cleaned;
+}
+
+function cleanResumeSkillsSection(resumeText: string): string {
+  return resumeText.split("\n").map(line => {
+    const commaCount = (line.match(/,/g) || []).length;
+    if (commaCount >= 4 && line.length > 40) {
+      const cleaned = cleanSkillsList(line);
+      return cleaned.length > 0 ? cleaned : line;
+    }
+    return line;
+  }).join("\n");
+}
+
 function filterTechnicalKeywords(keywords: string[]): string[] {
   return keywords.filter(kw => {
     const trimmed = kw.trim();
@@ -398,9 +444,17 @@ Rules:
     }
 
     const result = FixResumeResponse.parse(parsed_result);
-    req.log.info({ experienceCount: result.experienceImprovements.length }, "AI resume fix complete");
+
+    // Post-process: strip noise words from skills regardless of what the AI returned
+    const cleanedResult = {
+      ...result,
+      improvedSkills: cleanSkillsList(result.improvedSkills),
+      improvedResumeText: cleanResumeSkillsSection(result.improvedResumeText),
+    };
+
+    req.log.info({ experienceCount: cleanedResult.experienceImprovements.length }, "AI resume fix complete");
     void incrementStat("totalFixes");
-    res.json(result);
+    res.json(cleanedResult);
   } catch (err) {
     req.log.error({ err }, "AI resume fix failed");
     res.status(500).json({ error: "AI improvement failed. Please try again." });
