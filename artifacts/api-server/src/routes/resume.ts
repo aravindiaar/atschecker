@@ -311,55 +311,123 @@ router.post("/resume/ats-check", async (req, res): Promise<void> => {
   let uniqueMissing: string[];
 
   if (hasJD) {
-    // Targeted JD-match mode
     const rawJobKeywords = [...extractKeyPhrases(jobDescription!)];
-    let jobKeywords = filterTechnicalKeywords(rawJobKeywords);
+    const techKeywords = filterTechnicalKeywords(rawJobKeywords);
+    const isNonTechnicalJD = techKeywords.length < 3;
 
-    // If fewer than 3 tech keywords found, this is a non-technical JD.
-    // Fall back to broad tokenized matching so any role can be scored accurately.
-    const isNonTechnicalJD = jobKeywords.length < 3;
     if (isNonTechnicalJD) {
-      jobKeywords = tokenize(jobDescription!).filter(w => w.length > 3);
-    }
+      // ── AI-powered scoring for non-technical roles ──────────────────────────
+      const aiPrompt = `You are an ATS (Applicant Tracking System) expert. Analyse how well this resume matches the job description and return a JSON scoring report.
 
-    const matched: string[] = [];
-    const missing: string[] = [];
+RESUME:
+${resumeText.substring(0, 3000)}
 
-    for (const keyword of jobKeywords) {
-      if (keyword.length < 2) continue;
-      if (resumeText.toLowerCase().includes(keyword.toLowerCase())) {
-        matched.push(keyword);
-      } else {
-        missing.push(keyword);
+JOB DESCRIPTION:
+${jobDescription!.substring(0, 1500)}
+
+Return ONLY a JSON object (no markdown, no backticks):
+{
+  "keywordScore": <integer 0-100: how well the resume's language, skills and experience match the JD requirements>,
+  "matchedKeywords": ["keyword1", "keyword2", ...],
+  "missingKeywords": ["missing1", "missing2", ...],
+  "suggestions": ["actionable suggestion 1", "actionable suggestion 2", "actionable suggestion 3"],
+  "strengths": ["specific strength 1", "specific strength 2"]
+}
+
+Rules:
+- matchedKeywords: specific role-relevant words/phrases from the JD that ARE present in the resume (max 15, only meaningful terms — not filler words like "the", "and", "a", "role", "will")
+- missingKeywords: specific role-relevant words/phrases from the JD that are NOT in the resume and would genuinely help (max 10, only meaningful terms)
+- suggestions must be specific and actionable, referencing actual resume content
+- keywordScore reflects genuine semantic alignment, not just word counting`;
+
+      try {
+        const aiCompletion = await openai.chat.completions.create({
+          model: "gpt-5.2",
+          max_completion_tokens: 512,
+          messages: [{ role: "user", content: aiPrompt }],
+        });
+        const raw = aiCompletion.choices[0]?.message?.content ?? "";
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        const aiResult = jsonMatch ? JSON.parse(jsonMatch[0]) as {
+          keywordScore: number;
+          matchedKeywords: string[];
+          missingKeywords: string[];
+          suggestions: string[];
+          strengths: string[];
+        } : null;
+
+        if (aiResult) {
+          keywordScore = Math.min(100, Math.max(0, aiResult.keywordScore));
+          uniqueMatched = (aiResult.matchedKeywords ?? []).slice(0, 30);
+          uniqueMissing = (aiResult.missingKeywords ?? []).slice(0, 20);
+          suggestions.push(...(aiResult.suggestions ?? []).slice(0, 4));
+          strengths.push(...(aiResult.strengths ?? []).slice(0, 3));
+        } else {
+          throw new Error("Failed to parse AI scoring response");
+        }
+      } catch (aiErr) {
+        req.log.warn({ aiErr }, "AI scoring failed, falling back to tokenized match");
+        // Fallback to broad tokenized matching
+        const jobTokens = tokenize(jobDescription!).filter(w => w.length > 3);
+        const matched: string[] = [];
+        const missing: string[] = [];
+        for (const kw of jobTokens) {
+          if (resumeText.toLowerCase().includes(kw)) matched.push(kw);
+          else missing.push(kw);
+        }
+        const total = matched.length + missing.length;
+        keywordScore = total > 0 ? Math.round((matched.length / total) * 100) : 60;
+        uniqueMatched = [...new Set(matched)].slice(0, 30);
+        uniqueMissing = [...new Set(missing)].slice(0, 20);
+        suggestions.push("Tailor your resume language to more closely mirror the job description.");
       }
-    }
 
-    // Score based on raw counts BEFORE slicing/filtering (avoids denominator distortion)
-    const eligibleTotal = matched.length + missing.length;
-    keywordScore = eligibleTotal > 0
-      ? Math.round((matched.length / eligibleTotal) * 100)
-      : 70;
+      if (suggestions.length === 0) {
+        suggestions.push("Mirror the exact language from the job description in your summary and skills.");
+      }
+      if (strengths.length === 0) {
+        strengths.push("Resume includes relevant experience for this role.");
+      }
 
-    // Sliced/filtered lists are for display only
-    uniqueMatched = [...new Set(matched)].slice(0, 30);
-    uniqueMissing = [...new Set(missing)].slice(0, 20);
+    } else {
+      // ── Rule-based scoring for technical JDs ────────────────────────────────
+      const matched: string[] = [];
+      const missing: string[] = [];
 
-    if (uniqueMissing.length > 0) {
-      suggestions.push(`Add these missing keywords to your resume: ${uniqueMissing.slice(0, 5).join(", ")}`);
-    }
-    if (keywordScore < 60) {
-      suggestions.push("Tailor your summary and skills section to include more keywords from the job description.");
-    }
-    if (uniqueMissing.length > 5) {
-      suggestions.push("Consider adding a dedicated 'Technical Skills' section listing relevant technologies from the JD.");
-    }
-    if (uniqueMatched.length > 10) strengths.push("Strong keyword alignment with the job description.");
-    if (uniqueMatched.length > 5) strengths.push(`Good match on key terms: ${uniqueMatched.slice(0, 3).join(", ")}.`);
-    if (/azure|aws|cloud/i.test(resumeText) && /azure|aws|cloud/i.test(jobDescription!)) {
-      strengths.push("Cloud platform experience aligns with the job requirements.");
-    }
-    if (uniqueMatched.some((k) => ["c#", ".net", "rest", "api", "microservices"].includes(k))) {
-      strengths.push("Core backend technology stack matches the role.");
+      for (const keyword of techKeywords) {
+        if (keyword.length < 2) continue;
+        if (resumeText.toLowerCase().includes(keyword.toLowerCase())) {
+          matched.push(keyword);
+        } else {
+          missing.push(keyword);
+        }
+      }
+
+      const eligibleTotal = matched.length + missing.length;
+      keywordScore = eligibleTotal > 0
+        ? Math.round((matched.length / eligibleTotal) * 100)
+        : 70;
+
+      uniqueMatched = [...new Set(matched)].slice(0, 30);
+      uniqueMissing = [...new Set(missing)].slice(0, 20);
+
+      if (uniqueMissing.length > 0) {
+        suggestions.push(`Add these missing keywords to your resume: ${uniqueMissing.slice(0, 5).join(", ")}`);
+      }
+      if (keywordScore < 60) {
+        suggestions.push("Tailor your summary and skills section to include more keywords from the job description.");
+      }
+      if (uniqueMissing.length > 5) {
+        suggestions.push("Consider adding a dedicated 'Technical Skills' section listing relevant technologies from the JD.");
+      }
+      if (uniqueMatched.length > 10) strengths.push("Strong keyword alignment with the job description.");
+      if (uniqueMatched.length > 5) strengths.push(`Good match on key terms: ${uniqueMatched.slice(0, 3).join(", ")}.`);
+      if (/azure|aws|cloud/i.test(resumeText) && /azure|aws|cloud/i.test(jobDescription!)) {
+        strengths.push("Cloud platform experience aligns with the job requirements.");
+      }
+      if (uniqueMatched.some((k) => ["c#", ".net", "rest", "api", "microservices"].includes(k))) {
+        strengths.push("Core backend technology stack matches the role.");
+      }
     }
   } else {
     // General ATS check mode — evaluate resume on its own merit
